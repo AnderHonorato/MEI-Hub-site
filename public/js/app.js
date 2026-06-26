@@ -272,6 +272,9 @@ async function enviarMensagem(e){
 window.selecionarEstrela = function(v){
   document.querySelector('#ratingValor').value = v;
   document.querySelectorAll('.estrela-btn').forEach((b,i) => { b.classList.toggle('acesa', i < v); });
+  const emocoes = {1:'😞',2:'😕',3:'🙂',4:'😄',5:'🤩'};
+  const el = document.querySelector('#emocaoAvaliacao');
+  if(el){ el.textContent = emocoes[v]||''; el.style.animation = 'none'; setTimeout(()=>el.style.animation='emocaoPular .9s ease infinite alternate',10); }
 };
 
 async function enviarAvaliacao(e){
