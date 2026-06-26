@@ -462,8 +462,8 @@ async function handleApi(req, res, url) {
 
     if (method === 'GET' && pathname === '/api/launches') {
       if (!requireActivePlan(user, db, res)) return;
-      const launches = db.launches.filter(l => l.userId === user.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-      return ok(res, { launches: launches.map(l => ({ ...l, data: l.date, titulo: l.title, tipo: l.type, categoria: l.category, valor: l.amount })), launches });
+      const rows = db.launches.filter(l => l.userId === user.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+      return ok(res, { launches: rows.map(l => ({ ...l, data: l.date, titulo: l.title, tipo: l.type, categoria: l.category, valor: l.amount })) });
     }
 
     if (method === 'POST' && pathname === '/api/launches') {
