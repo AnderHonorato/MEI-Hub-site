@@ -269,6 +269,11 @@ async function enviarMensagem(e){
   if(anexo){corpo.attachmentDataUrl=anexo.dataUrl;corpo.attachmentName=anexo.nome;}
   try{await api(`/api/tickets/${estado.chamadoAtual.id}/messages`,{method:'POST',body:JSON.stringify(corpo)}); e.target.reset(); await atualizarChamadoAtual();}catch(err){toast(err.message,'error')}
 }
+window.selecionarEstrela = function(v){
+  document.querySelector('#ratingValor').value = v;
+  document.querySelectorAll('.estrela-btn').forEach((b,i) => { b.classList.toggle('acesa', i < v); });
+};
+
 async function enviarAvaliacao(e){
   e.preventDefault(); const fd=new FormData(e.target);
   try{await api(`/api/tickets/${estado.chamadoAtual.id}/feedback`,{method:'POST',body:JSON.stringify({rating:Number(fd.get('rating')),comment:fd.get('comment')||''})}); toast('Avaliação enviada. Obrigado!'); await atualizarChamadoAtual();}catch(err){toast(err.message,'error')}
