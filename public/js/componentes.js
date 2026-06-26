@@ -31,10 +31,10 @@ function modalPerfilDetalhe(){
 }
 
 function bolhaMensagemEquipe(m){
-  if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${escaparHtml(m.texto||'')}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
+  if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${formatarTexto(m.texto||'')}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
   const remetente=m.remetente||{}
   const cls=remetente.id===estado.usuario.id?'eu':'outro'
-  return `<div class="msg ${cls}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong>${iconeCargo(remetente)}</div>${m.texto?`<div class="msg-texto">${escaparHtml(m.texto)}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}<small>${dataHoraFormatada(m.criadoEm)}</small></div>`
+  return `<div class="msg-linha ${cls}"><div class="msg ${cls}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong>${iconeCargo(remetente)}</div>${m.texto?`<div class="msg-texto">${formatarTexto(m.texto)}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}</div><small class="msg-hora">${dataHoraFormatada(m.criadoEm)}</small></div>`
 }
 
 function modalChatEquipe(){
@@ -52,13 +52,10 @@ function modalFlutuante(){
 }
 
 function comporConversa(t){
-  if(t.status==='closed') return '<div class="chat-compor"><div class="vazio vazio-compacto">Conversa encerrada. Para continuar, abra um novo protocolo.</div></div>'
+  if(t.status==='closed') return '<div class="chat-compor"><div class="vazio vazio-compacto">Conversa encerrada.</div></div>'
   const podeResponder = ehCliente() || estado.usuario.cargo==='owner' || (t.atendente?.id === estado.usuario.id)
   if(!podeResponder) return '<div class="chat-compor"><div class="vazio vazio-compacto">Este chamado está sendo atendido por outro membro da equipe.</div></div>'
-  const podeTransferir = ehEquipe() && t.atendente && t.atendente.id === estado.usuario.id && t.status==='in_progress'
-  const equipe = (estado.usuariosEquipe||[]).filter(u=>u.id!==estado.usuario.id)
-  const modelos = estado.modelos||[]
-  return `<form id="formularioMensagem" class="chat-compor"><div id="previaImagem" class="previa-imagem" style="display:none"></div><div class="chat-compor-linha"><textarea id="textoMensagem" name="text" placeholder="Escreva sua resposta" rows="1" oninput="this.style.height='';this.style.height=Math.min(this.scrollHeight,160)+'px'"></textarea><label class="arquivo-inline" title="Anexar imagem">${icone('anexo')}<input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange="previaAnexo(this)"></label>${modelos.length?`<select id="seletorModelo" onchange="aplicarModelo(this)" style="border:1px solid var(--linha);border-radius:12px;padding:8px;font-size:11px;background:#fff"><option value="">Modelos</option>${modelos.map(m=>`<option value="${m.id}">${escaparHtml(m.titulo)}</option>`).join('')}</select>`:''}<button class="btn primary">${icone('enviar')}</button>${podeTransferir?`<select id="transferirAtendimento" style="font-size:11px;border:1px solid var(--linha);border-radius:12px;padding:8px;background:#fff"><option value="">Transferir</option>${equipe.map(u=>`<option value="${u.id}">${escaparHtml(u.nome)}</option>`).join('')}</select>`:''}</div></form>`
+  return `<form id="formularioMensagem" class="chat-compor"><div id="previaImagem" class="previa-imagem" style="display:none"></div><textarea id="textoMensagem" name="text" placeholder="Escreva sua resposta... **negrito** *itálico*" rows="1" oninput="this.style.height='';this.style.height=Math.min(this.scrollHeight,160)+'px'"></textarea><div class="chat-compor-acoes"><label class="arquivo-inline" title="Anexar imagem">${icone('anexo')}<input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange="previaAnexo(this)"></label><button class="btn primary">${icone('enviar')}</button></div></form>`
 }
 
 function formularioChamado(tipo){

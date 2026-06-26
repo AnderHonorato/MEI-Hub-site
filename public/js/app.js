@@ -193,6 +193,7 @@ function vincularAba(){
 function vincularChamadoDinamico(){
   if(document.querySelector('#btnFecharChamadoTopo')) document.querySelector('#btnFecharChamadoTopo').onclick=()=>fecharChamado(estado.chamadoAtual.id);
   if(document.querySelector('#formularioMensagem')) document.querySelector('#formularioMensagem').onsubmit=enviarMensagem;
+  if(document.querySelector('#seletorModeloTopo')) document.querySelector('#seletorModeloTopo').onchange=function(){aplicarModelo(this)};
   if(document.querySelector('#transferirAtendimento')) document.querySelector('#transferirAtendimento').onchange=function(){if(this.value) transferirAtendimento(this.value)};
   if(document.querySelector('#formularioAvaliacao')) document.querySelector('#formularioAvaliacao').onsubmit=enviarAvaliacao;
   $$('[data-midia-url]', document.querySelector('.chat-modal') || document).forEach(b=>b.onclick=()=>{estado.midiaModal={url:b.dataset.midiaUrl,nome:b.dataset.midiaNome,mime:b.dataset.midiaMime};renderizarApp();});

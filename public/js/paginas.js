@@ -117,10 +117,10 @@ function visaoAdmin(){
 }
 
 function bolhaMensagem(m){
-  if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${m.texto||''}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
+  if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${formatarTexto(m.texto||'')}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
   const remetente=m.remetente||{}
   const souEu=remetente.id===estado.usuario.id
-  return `<div class="msg-linha ${souEu?'eu':'outro'}"><div class="msg ${souEu?'eu':'outro'}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong>${iconeCargo(remetente)}</div>${m.texto?`<div class="msg-texto">${m.texto}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}</div><small class="msg-hora">${dataHoraFormatada(m.criadoEm)}</small></div>`
+  return `<div class="msg-linha ${souEu?'eu':'outro'}"><div class="msg ${souEu?'eu':'outro'}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong>${iconeCargo(remetente)}</div>${m.texto?`<div class="msg-texto">${formatarTexto(m.texto)}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}</div><small class="msg-hora">${dataHoraFormatada(m.criadoEm)}</small></div>`
 }
 
 function conversaChamadoHtml(){
@@ -133,7 +133,10 @@ function modalChamado(){
   if(!estado.chamadoAtual) return ''
   const t=estado.chamadoAtual
   const podeFechar = (ehEquipe()||ehCliente()) && t.status!=='closed'
-  return `<div class="modal-superposicao"><div class="modal largo chat-modal"><div class="chat-modal-topo modal-cabecalho"><div><h2>${escaparHtml(t.protocolo)} · ${escaparHtml(t.titulo)}</h2><p class="texto-guia" id="metaModalChamado">${escaparHtml(textoMetaChamado(t))}</p></div><div class="mini-acoes">${podeFechar?`<button class="btn perigo" id="btnFecharChamadoTopo">Finalizar</button>`:''}<button class="fechar" id="btnFecharModalChamado">×</button></div></div><div class="chat" id="corpoChatChamado">${conversaChamadoHtml()}</div><div id="areaComporChamado">${comporConversa(t)}${t.status==='closed'&&ehCliente()&&!t.feedback?formularioAvaliacao():''}</div></div></div>`
+  const podeTransferir = ehEquipe() && t.atendente && t.atendente.id === estado.usuario.id && t.status==='in_progress'
+  const equipe = (estado.usuariosEquipe||[]).filter(u=>u.id!==estado.usuario.id)
+  const modelos = estado.modelos||[]
+  return `<div class="modal-superposicao"><div class="modal largo chat-modal"><div class="chat-modal-topo modal-cabecalho"><div><h2>${escaparHtml(t.protocolo)} · ${escaparHtml(t.titulo)}</h2><p class="texto-guia" id="metaModalChamado">${escaparHtml(textoMetaChamado(t))}</p></div><div class="mini-acoes">${modelos.length?`<select id="seletorModeloTopo" onchange="aplicarModelo(this)" style="font-size:11px;border:1px solid var(--linha);border-radius:12px;padding:6px 8px;background:#fff"><option value="">Modelos</option>${modelos.map(m=>`<option value="${m.id}">${escaparHtml(m.titulo)}</option>`).join('')}</select>`:''}${podeTransferir?`<select id="transferirAtendimento" style="font-size:11px;border:1px solid var(--linha);border-radius:12px;padding:6px 8px;background:#fff"><option value="">Transferir</option>${equipe.map(u=>`<option value="${u.id}">${escaparHtml(u.nome)}</option>`).join('')}</select>`:''}${podeFechar?`<button class="btn perigo" id="btnFecharChamadoTopo">Finalizar</button>`:''}<button class="fechar" id="btnFecharModalChamado">×</button></div></div><div class="chat" id="corpoChatChamado">${conversaChamadoHtml()}</div><div id="areaComporChamado">${comporConversa(t)}${t.status==='closed'&&ehCliente()&&!t.feedback?formularioAvaliacao():''}</div></div></div>`
 }
 
 function visaoBloqueio(){

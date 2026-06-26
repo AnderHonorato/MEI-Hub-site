@@ -4,7 +4,15 @@ function escaparHtml(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&
 function dataHoraFormatada(v){ return v ? new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}) : '—'; }
 function naoPagos(){ return (estado.notificacoes||[]).filter(n=>!n.lida).length; }
 function iconeNotificacao(n){ if(n?.tipo==='cobranca') return 'cartao'; if(n?.tipo==='sinalizacao') return 'bandeira'; return n?.tipo==='equipe'?'chat':'sino'; }
-function iconeCargo(usuario){
+function formatarTexto(t){
+  if(!t) return ''
+  let txt = escaparHtml(t)
+  txt = txt.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  txt = txt.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  txt = txt.replace(/`(.+?)`/g, '<code>$1</code>')
+  txt = txt.replace(/\n/g, '<br>')
+  return txt
+}
   if(usuario?.cargo==='customer') return ''
   const mapa = {owner:{ic:'escudo',titulo:'Fundador'},support:{ic:'chat',titulo:'Suporte'},moderator:{ic:'bandeira',titulo:'Moderador'}}
   const c = mapa[usuario?.cargo]
