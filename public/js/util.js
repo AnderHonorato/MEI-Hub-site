@@ -13,6 +13,7 @@ function formatarTexto(t){
   txt = txt.replace(/\n/g, '<br>')
   return txt
 }
+function iconeCargo(usuario){
   if(usuario?.cargo==='customer') return ''
   const mapa = {owner:{ic:'escudo',titulo:'Fundador'},support:{ic:'chat',titulo:'Suporte'},moderator:{ic:'bandeira',titulo:'Moderador'}}
   const c = mapa[usuario?.cargo]
