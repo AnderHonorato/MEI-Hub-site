@@ -133,7 +133,7 @@ function modalChamado(){
   if(!estado.chamadoAtual) return ''
   const t=estado.chamadoAtual
   const podeFechar = (ehEquipe()||ehCliente()) && t.status!=='closed'
-  return `<div class="modal-superposicao"><div class="modal largo chat-modal"><div class="chat-modal-topo modal-cabecalho"><div><h2>${escaparHtml(t.protocolo)} · ${escaparHtml(t.titulo)}</h2><p class="texto-guia" id="metaModalChamado">${escaparHtml(textoMetaChamado(t))}</p></div><div class="mini-acoes">${podeFechar?`<button class="btn perigo" id="btnFecharChamadoTopo">Finalizar</button>`:''}<button class="fechar" id="btnFecharModalChamado">×</button></div></div><div class="chat" id="corpoChatChamado">${conversaChamadoHtml()}</div><div id="areaComporChamado">${comporConversa(t)}${t.status==='closed'&&ehCliente()?formularioAvaliacao():''}</div></div></div>`
+  return `<div class="modal-superposicao"><div class="modal largo chat-modal"><div class="chat-modal-topo modal-cabecalho"><div><h2>${escaparHtml(t.protocolo)} · ${escaparHtml(t.titulo)}</h2><p class="texto-guia" id="metaModalChamado">${escaparHtml(textoMetaChamado(t))}</p></div><div class="mini-acoes">${podeFechar?`<button class="btn perigo" id="btnFecharChamadoTopo">Finalizar</button>`:''}<button class="fechar" id="btnFecharModalChamado">×</button></div></div><div class="chat" id="corpoChatChamado">${conversaChamadoHtml()}</div><div id="areaComporChamado">${comporConversa(t)}${t.status==='closed'&&ehCliente()&&!t.feedback?formularioAvaliacao():''}</div></div></div>`
 }
 
 function visaoBloqueio(){

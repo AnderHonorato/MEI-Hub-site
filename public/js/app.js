@@ -220,6 +220,7 @@ async function carregarDadosAba(forcar=false){
     if(aba==='obrigacoes' && planoOk()) estado.obrigacoes=(await api('/api/obligations')).obligations;
     if(['suporte','denuncia','moderacao'].includes(aba)) estado.chamados=(await api('/api/tickets')).tickets;
     if(ehEquipe() && ['suporte','moderacao'].includes(aba) && estado.subAbaSuporte==='experiencia'){ const f=await api('/api/admin/feedbacks'); estado.avaliacoes=f.feedbacks; estado.ranking=f.ranking; }
+    if(ehEquipe() && ['suporte','moderacao'].includes(aba) && estado.subAbaSuporte==='modelos'){ estado.modelos=(await api('/api/templates')).templates; }
     if(aba==='admin' && estado.usuario.cargo==='owner'){ estado.metricas=(await api('/api/admin/metrics')).metrics; estado.usuarios=(await api('/api/admin/users')).users; }
     if(estado.chatEquipeAberto) await carregarDadosEquipe(false);
     if(forcar) toast('Dados atualizados.'); renderizarApp(); processarNotificacoesRecebidas(estado.notificacoes);
