@@ -11,5 +11,6 @@ const estado = {
   barraRecolhida: localStorage.getItem('mei_barra') === 'recolhida',
   flutuanteAberto: false,
   usuarioDetalhe: null, sinalizacoesUsuario: [],
-  notificarModalAberto: false, notificarUsuarioId: null
+  notificarModalAberto: false, notificarUsuarioId: null,
+  modelos: []
 };

@@ -186,11 +186,13 @@ function vincularAba(){
   document.querySelector('#removerMembroEquipe')?.addEventListener('change',e=>{if(e.target.value) removerMembroEquipe(e.target.value);});
   document.querySelector('#btnNotificarFechar')?.addEventListener('click',()=>{estado.notificarModalAberto=false;estado.notificarUsuarioId=null;renderizarApp();});
   document.querySelector('#formularioEnviarNotificacao')?.addEventListener('submit',enviarNotificacaoAdmin);
+  document.querySelector('#formularioModelo')?.addEventListener('submit',criarModelo);
+  $$('[data-excluir-modelo]').forEach(b=>b.onclick=()=>excluirModelo(b.dataset.excluirModelo));
 }
 
 function vincularChamadoDinamico(){
+  if(document.querySelector('#btnFecharChamadoTopo')) document.querySelector('#btnFecharChamadoTopo').onclick=()=>fecharChamado(estado.chamadoAtual.id);
   if(document.querySelector('#formularioMensagem')) document.querySelector('#formularioMensagem').onsubmit=enviarMensagem;
-  if(document.querySelector('#btnFecharChamado')) document.querySelector('#btnFecharChamado').onclick=()=>fecharChamado(estado.chamadoAtual.id);
   if(document.querySelector('#transferirAtendimento')) document.querySelector('#transferirAtendimento').onchange=function(){if(this.value) transferirAtendimento(this.value)};
   if(document.querySelector('#formularioAvaliacao')) document.querySelector('#formularioAvaliacao').onsubmit=enviarAvaliacao;
   $$('[data-midia-url]', document.querySelector('.chat-modal') || document).forEach(b=>b.onclick=()=>{estado.midiaModal={url:b.dataset.midiaUrl,nome:b.dataset.midiaNome,mime:b.dataset.midiaMime};renderizarApp();});
@@ -237,7 +239,7 @@ function pararChamado(){ if(temporizadorChamado){clearInterval(temporizadorChama
 function rolarChatFim(){ setTimeout(()=>{ const el=document.querySelector('.chat'); if(el) el.scrollTop=el.scrollHeight; },40); }
 
 async function abrirChamado(id, silencioso=false){
-  try{const dados=await api(`/api/tickets/${id}/messages`); estado.chamadoAtual=dados.ticket; estado.mensagens=dados.messages; estado.infoFila=dados.queueInfo; if(!silencioso){pararChamado(); temporizadorChamado=setInterval(()=>atualizarChamadoAtual(),2500);} if(ehEquipe()){try{const u=await api('/api/team/users'); estado.usuariosEquipe=u.users;}catch{}} renderizarApp(); rolarChatFim();}catch(err){toast(err.message,'error')}
+  try{const dados=await api(`/api/tickets/${id}/messages`); estado.chamadoAtual=dados.ticket; estado.mensagens=dados.messages; estado.infoFila=dados.queueInfo; if(!silencioso){pararChamado(); temporizadorChamado=setInterval(()=>atualizarChamadoAtual(),2500);} if(ehEquipe()){try{const u=await api('/api/team/users'); estado.usuariosEquipe=u.users; const tpl=await api('/api/templates'); estado.modelos=tpl.templates;}catch{}} renderizarApp(); rolarChatFim();}catch(err){toast(err.message,'error')}
 }
 async function atualizarChamadoAtual(){
   if(!estado.chamadoAtual) return; const rascunho=document.querySelector('#textoMensagem')?.value||'';
@@ -269,6 +271,24 @@ async function enviarMensagem(e){
   if(anexo){corpo.attachmentDataUrl=anexo.dataUrl;corpo.attachmentName=anexo.nome;}
   try{await api(`/api/tickets/${estado.chamadoAtual.id}/messages`,{method:'POST',body:JSON.stringify(corpo)}); e.target.reset(); await atualizarChamadoAtual();}catch(err){toast(err.message,'error')}
 }
+window.previaAnexo = async function(input){
+  const anexo = await arquivoParaDataUrl(input);
+  const prev = document.querySelector('#previaImagem');
+  if(!prev) return;
+  if(anexo){ prev.style.display='block'; prev.innerHTML=`<img src="${anexo.dataUrl}" style="max-height:120px;border-radius:10px"><button type="button" onclick="removerPrevia()" style="position:absolute;top:4px;right:4px;background:#bd3131;color:#fff;border:0;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer">×</button>`; prev.style.position='relative'; }
+};
+window.removerPrevia = function(){ const p=document.querySelector('#previaImagem'); if(p){p.style.display='none';p.innerHTML='';} const f=document.querySelector('input[name=attachment]'); if(f)f.value=''; };
+window.aplicarModelo = function(sel){
+  if(!sel.value) return;
+  const m = estado.modelos.find(m=>m.id===sel.value);
+  if(!m) return;
+  mostrarConfirmacao('Modelo: '+escaparHtml(m.titulo), m.texto, ()=>{
+    const ta = document.querySelector('#textoMensagem');
+    if(ta){ ta.value = m.texto; ta.style.height=''; ta.style.height=Math.min(ta.scrollHeight,160)+'px'; }
+    sel.value='';
+  });
+};
+
 window.selecionarEstrela = function(v){
   document.querySelector('#ratingValor').value = v;
   document.querySelectorAll('.estrela-btn').forEach((b,i) => { b.classList.toggle('acesa', i < v); });
@@ -300,6 +320,16 @@ async function enviarMensagemEquipe(e){ e.preventDefault(); const fd=new FormDat
 async function excluirConversaEquipe(){ if(!estado.conversaEquipeAtual)return; mostrarConfirmacao('Excluir conversa','Excluir esta conversa?',async()=>{try{await api(`/api/team/conversations/${estado.conversaEquipeAtual.id}`,{method:'DELETE'}); estado.conversaEquipeAtual=null; estado.mensagensEquipe=[]; await carregarDadosEquipe();}catch(err){toast(err.message,'error')}}) }
 async function adicionarMembroEquipe(membroId){ if(!estado.conversaEquipeAtual)return; try{await api(`/api/team/conversations/${estado.conversaEquipeAtual.id}/members`,{method:'POST',body:JSON.stringify({memberIds:[membroId]})}); await abrirConversaEquipe(estado.conversaEquipeAtual.id);}catch(err){toast(err.message,'error')} }
 async function removerMembroEquipe(membroId){ if(!estado.conversaEquipeAtual)return; mostrarConfirmacao('Remover membro','Remover este membro?',async()=>{try{await api(`/api/team/conversations/${estado.conversaEquipeAtual.id}/members/${membroId}`,{method:'DELETE'}); await abrirConversaEquipe(estado.conversaEquipeAtual.id);}catch(err){toast(err.message,'error')}}) }
+
+async function criarModelo(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{await api('/api/templates',{method:'POST',body:JSON.stringify({title:fd.get('title'),text:fd.get('text')})}); toast('Modelo salvo.'); e.target.reset(); await carregarDadosAba();}catch(err){toast(err.message,'error')}
+}
+async function excluirModelo(id){
+  mostrarConfirmacao('Excluir modelo','Excluir este modelo?',async()=>{
+    try{await api(`/api/templates/${id}`,{method:'DELETE'}); toast('Modelo excluído.'); await carregarDadosAba();}catch(err){toast(err.message,'error')}
+  })
+}
 
 async function enviarNotificacaoAdmin(e){
   e.preventDefault(); const fd=new FormData(e.target);

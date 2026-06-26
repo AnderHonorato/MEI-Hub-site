@@ -910,6 +910,34 @@ async function handleApi(req, res, url) {
       return ok(res, { notification: n });
     }
 
+    if (method === 'GET' && pathname === '/api/templates') {
+      if (!isStaff(user)) return fail(res, 403, 'Apenas equipe.');
+      const templates = db.templates.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+      return ok(res, { templates: templates.map(t => ({ ...t, titulo: t.title, texto: t.text })) });
+    }
+    if (method === 'POST' && pathname === '/api/templates') {
+      if (!isStaff(user)) return fail(res, 403, 'Apenas equipe.');
+      const body = await readBody(req);
+      const title = textoLimpo(body.title, 120);
+      const text = textoLimpo(body.text, 4000);
+      if (!title || !text) return fail(res, 400, 'Informe título e texto do modelo.');
+      const tpl = { id: uid('tpl'), createdBy: user.id, title, text, createdAt: agoraISO() };
+      db.templates.push(tpl);
+      auditar(db, user.id, 'template.create', { templateId: tpl.id });
+      escreverBanco(db);
+      return ok(res, { template: { ...tpl, titulo: tpl.title, texto: tpl.text } });
+    }
+    const templateDelete = pathname.match(/^\/api\/templates\/([^/]+)$/);
+    if (templateDelete && method === 'DELETE') {
+      if (!isStaff(user)) return fail(res, 403, 'Apenas equipe.');
+      const idx = db.templates.findIndex(t => t.id === templateDelete[1]);
+      if (idx < 0) return fail(res, 404, 'Modelo não encontrado.');
+      db.templates.splice(idx, 1);
+      auditar(db, user.id, 'template.delete', { templateId: templateDelete[1] });
+      escreverBanco(db);
+      return ok(res);
+    }
+
     if (method === 'GET' && pathname === '/api/admin/metrics') {
       if (!requireRole(user, [CARGOS.OWNER], res)) return;
       return ok(res, {

@@ -20,6 +20,7 @@ function bancoVazio() {
     messages: [],
     ticketFeedbacks: [],
     flaggedUsers: [],
+    templates: [],
     teamConversations: [],
     teamMessages: [],
     legalAcceptances: [],

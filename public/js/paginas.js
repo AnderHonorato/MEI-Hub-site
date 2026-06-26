@@ -68,7 +68,7 @@ function visaoModeracao(){
 }
 
 function visaoEquipeChamados(tipo,titulo){
-  return `<div class="grade"><div class="painel"><div class="secao-titulo compacto"><div><h2>${titulo}</h2><p class="texto-guia">Urgentes aparecem no topo; use os filtros para separar abertos, em atendimento e finalizados.</p></div><div class="segmentado"><button class="${estado.subAbaSuporte==='fila'?'ativo':''}" data-subaba-suporte="fila">Fila</button><button class="${estado.subAbaSuporte==='experiencia'?'ativo':''}" data-subaba-suporte="experiencia">Experiência</button></div></div>${estado.subAbaSuporte==='experiencia'?visaoExperiencia():`${filtrosChamados()}${filaChamados(tipo)}`}</div></div>`
+  return `<div class="grade"><div class="painel"><div class="secao-titulo compacto"><div><h2>${titulo}</h2><p class="texto-guia">Urgentes aparecem no topo; use os filtros para separar abertos, em atendimento e finalizados.</p></div><div class="segmentado"><button class="${estado.subAbaSuporte==='fila'?'ativo':''}" data-subaba-suporte="fila">Fila</button><button class="${estado.subAbaSuporte==='experiencia'?'ativo':''}" data-subaba-suporte="experiencia">Experiência</button><button class="${estado.subAbaSuporte==='modelos'?'ativo':''}" data-subaba-suporte="modelos">Modelos</button></div></div>${estado.subAbaSuporte==='experiencia'?visaoExperiencia():estado.subAbaSuporte==='modelos'?visaoModelos():`${filtrosChamados()}${filaChamados(tipo)}`}</div></div>`
 }
 
 function filaChamados(tipo){
@@ -117,10 +117,10 @@ function visaoAdmin(){
 }
 
 function bolhaMensagem(m){
-  if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${escaparHtml(m.texto||'')}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
+  if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${m.texto||''}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
   const remetente=m.remetente||{}
   const souEu=remetente.id===estado.usuario.id
-  return `<div class="msg ${souEu?'eu':'outro'}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong><span class="marcador escuro">${escaparHtml(tipoMarcador(remetente))}</span></div>${m.texto?`<div class="msg-texto">${escaparHtml(m.texto)}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}<small>${dataHoraFormatada(m.criadoEm)}</small></div>`
+  return `<div class="msg-linha ${souEu?'eu':'outro'}"><div class="msg ${souEu?'eu':'outro'}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong><span class="marcador escuro">${escaparHtml(tipoMarcador(remetente))}</span></div>${m.texto?`<div class="msg-texto">${m.texto}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}</div><small class="msg-hora">${dataHoraFormatada(m.criadoEm)}</small></div>`
 }
 
 function conversaChamadoHtml(){
@@ -132,7 +132,8 @@ function conversaChamadoHtml(){
 function modalChamado(){
   if(!estado.chamadoAtual) return ''
   const t=estado.chamadoAtual
-  return `<div class="modal-superposicao"><div class="modal largo chat-modal"><div class="chat-modal-topo modal-cabecalho"><div><h2>${escaparHtml(t.protocolo)} · ${escaparHtml(t.titulo)}</h2><p class="texto-guia" id="metaModalChamado">${escaparHtml(textoMetaChamado(t))}</p></div><button class="fechar" id="btnFecharModalChamado">×</button></div><div class="chat" id="corpoChatChamado">${conversaChamadoHtml()}</div><div id="areaComporChamado">${comporConversa(t)}${t.status==='closed'&&ehCliente()?formularioAvaliacao():''}</div></div></div>`
+  const podeFechar = (ehEquipe()||ehCliente()) && t.status!=='closed'
+  return `<div class="modal-superposicao"><div class="modal largo chat-modal"><div class="chat-modal-topo modal-cabecalho"><div><h2>${escaparHtml(t.protocolo)} · ${escaparHtml(t.titulo)}</h2><p class="texto-guia" id="metaModalChamado">${escaparHtml(textoMetaChamado(t))}</p></div><div class="mini-acoes">${podeFechar?`<button class="btn perigo" id="btnFecharChamadoTopo">Finalizar</button>`:''}<button class="fechar" id="btnFecharModalChamado">×</button></div></div><div class="chat" id="corpoChatChamado">${conversaChamadoHtml()}</div><div id="areaComporChamado">${comporConversa(t)}${t.status==='closed'&&ehCliente()?formularioAvaliacao():''}</div></div></div>`
 }
 
 function visaoBloqueio(){
