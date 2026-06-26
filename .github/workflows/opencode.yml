@@ -24,6 +24,11 @@ jobs:
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: deepseek/deepseek-v4-pro
+          prompt: |
+            Projeto: MEI no Controle — SaaS full-stack Node.js vanilla (sem dependências externas).
+            Stack: http nativo, JSON file database, vanilla JS SPA, CSS puro, testes node:test.
+            Siga as convenções definidas em AGENTS.md e opencode.json.
+            Analise o contexto do comentário e execute a tarefa solicitada.

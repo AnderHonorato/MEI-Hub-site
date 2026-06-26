@@ -19,13 +19,14 @@ jobs:
 
       - uses: anomalyco/opencode/github@latest
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: deepseek/deepseek-v4-pro
           use_github_token: true
           prompt: |
-            Revise este pull request:
+            Projeto: MEI no Controle — SaaS Node.js vanilla zero-dependência (http nativo, JSON file DB, vanilla JS).
+            Revise este pull request seguindo as convenções em AGENTS.md:
             - Verifique problemas de qualidade de código
             - Procure por potenciais bugs
-            - Sugira melhorias
+            - Sugira melhorias alinhadas às convenções do projeto

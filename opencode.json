@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-v4-pro",
+  "autoupdate": false,
+  "share": "manual",
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "provider": {
+    "deepseek": {
+      "options": {
+        "setCacheKey": true,
+        "timeout": 600000
+      }
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "prune": false,
+    "reserved": 10000
+  },
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "data/**",
+      "uploads/**",
+      ".git/**",
+      "*.zip",
+      "*.log"
+    ]
+  },
+  "permission": {
+    "edit": "allow",
+    "write": "allow"
+  }
+}
