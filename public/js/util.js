@@ -35,3 +35,42 @@ function statusObrigacao(s){return ({pending:'Pendente',paid:'Pago',late:'Atrasa
 function painelCarregando(txt){ return `<div class="painel"><div class="vazio">${txt}</div></div>` }
 function tituloAba(){ return ({dashboard:'Dashboard',lancamentos:'Lançamentos',obrigacoes:'Obrigações fiscais',relatorios:'Relatórios',suporte:'Suporte por protocolo',denuncia:'Denúncias e uso indevido',moderacao:'Fila de moderação',assinatura:'Assinatura',conta:'Conta e privacidade',admin:'Administração'}[estado.aba]||'Painel'); }
 function subtituloAba(){ return ({dashboard:'Resumo do faturamento, limite anual e próximos vencimentos.',lancamentos:'Receitas e despesas do seu MEI.',obrigacoes:'DAS, DASN-SIMEI, comprovantes e status.',relatorios:'Resumo mensal para conferência ou envio ao contador.',suporte:'Abra ou acompanhe conversas com a equipe de suporte.',denuncia:'Reporte abuso, má fé ou uso indevido da plataforma.',moderacao:'Protocolos de denúncia com bloqueio por atendente.',assinatura:'Teste grátis, checkout e cobranças.',conta:'Dados do MEI, notificações, cookies e LGPD.',admin:'Usuários, métricas e permissões da equipe.'}[estado.aba]||''); }
+function aplicarFormatacaoTexto(textarea, tipo){
+  const marcadores = { negrito: '**', italico: '*', codigo: '`' }
+  const marcador = marcadores[tipo]
+  if(!marcador) return
+  const inicio = textarea.selectionStart
+  const fim = textarea.selectionEnd
+  const textoSelecionado = textarea.value.slice(inicio, fim) || 'texto'
+  const novoValor = textarea.value.slice(0, inicio) + marcador + textoSelecionado + marcador + textarea.value.slice(fim)
+  textarea.value = novoValor
+  textarea.focus()
+  textarea.selectionStart = inicio + marcador.length
+  textarea.selectionEnd = inicio + marcador.length + textoSelecionado.length
+}
+function ativarTravaDeEdicao(form){
+  const botaoEditar = form.querySelector('[data-editar-formulario]')
+  const botaoSalvar = form.querySelector('[data-salvar-formulario]')
+  const botaoCancelar = form.querySelector('[data-cancelar-formulario]')
+  if(!botaoEditar || !botaoSalvar || !botaoCancelar) return
+  const valoresOriginais = new FormData(form)
+
+  botaoEditar.onclick = () => {
+    form.classList.remove('modo-leitura')
+    form.querySelectorAll('input, select, textarea').forEach(campo => campo.disabled = false)
+    botaoEditar.style.display = 'none'
+    botaoSalvar.style.display = ''
+    botaoCancelar.style.display = ''
+  }
+  botaoCancelar.onclick = () => {
+    for (const [nome, valor] of valoresOriginais.entries()) {
+      const campo = form.elements[nome]
+      if (campo && campo.type !== 'file') campo.value = valor
+    }
+    form.classList.add('modo-leitura')
+    form.querySelectorAll('input, select, textarea').forEach(campo => campo.disabled = true)
+    botaoEditar.style.display = ''
+    botaoSalvar.style.display = 'none'
+    botaoCancelar.style.display = 'none'
+  }
+}

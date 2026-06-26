@@ -27,5 +27,5 @@ function icone(nome, classe='icone') {
   };
   return `<svg class="${classe}" viewBox="0 0 24 24" aria-hidden="true">${caminhos[nome] || caminhos.logotipo}</svg>`;
 }
-function logotipo(){ return `<div class="logotipo"><div class="logotipo-marca">${icone('logotipo')}</div><div><strong>MEI no Controle</strong><small>Faturamento, DAS e obrigações</small></div></div>`; }
+function logotipo(){ return `<div class="logotipo"><img class="logotipo-marca" src="/img/icone-base.png" alt="Meiraiz"><div><img class="logotipo-texto" src="/img/texto-sem-fundo-modo-claro.png" alt="Meiraiz"><small>Faturamento, DAS e obrigações</small></div></div>`; }
 function barraCookie(){ if(localStorage.getItem('mei_cookie_ok')) return ''; return `<div class="cookie"><div><strong>Preferências de cookies</strong><p>Usamos cookies necessários para login e segurança. Você pode liberar ou recusar cookies analíticos e de marketing.</p></div><div class="mini-acoes"><button class="btn" id="cookieNecessario">Somente necessários</button><button class="btn primary" id="cookieAceitar">Aceitar todos</button></div></div>`; }

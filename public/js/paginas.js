@@ -2,7 +2,7 @@ function itensNavegacao(){
   if(estado.usuario?.cargo==='owner') return [['admin','usuarios','Admin'],['suporte','chat','Suporte'],['moderacao','bandeira','Moderação'],['conta','configuracoes','Conta']]
   if(estado.usuario?.cargo==='support') return [['suporte','chat','Atendimentos'],['conta','configuracoes','Conta']]
   if(estado.usuario?.cargo==='moderator') return [['moderacao','bandeira','Denúncias'],['conta','configuracoes','Conta']]
-  return [['dashboard','grafico','Dashboard'],['lancamentos','carteira','Lançamentos'],['obrigacoes','calendario','Obrigações'],['relatorios','arquivo','Relatórios'],['suporte','chat','Suporte'],['denuncia','bandeira','Denúncias'],['assinatura','cartao','Assinatura'],['conta','configuracoes','Conta']]
+  return [['dashboard','grafico','Dashboard'],['lancamentos','carteira','Lançamentos'],['obrigacoes','calendario','Obrigações'],['relatorios','arquivo','Relatórios'],['suporte','chat','Suporte'],['denuncia','bandeira','Denúncias'],['conta','configuracoes','Conta']]
 }
 
 function estatistica(ic,rotulo,valor,tipo='ok'){
@@ -33,16 +33,44 @@ function visaoDashboard(){
   const d=estado.dashboard
   if(!d) return painelCarregando('Carregando dashboard...')
   const c=d.atual||{}
-  const pct=Math.min(100,c.percentual||0)
-  const classeStatus=c.status==='limit_exceeded'?'perigo':c.status==='warning'?'alerta':'ok'
-  return `<div class="grade"><div class="painel suave"><div class="secao-titulo"><div><h2>Faturamento acumulado de ${d.ano}</h2><p class="texto-guia">${dinheiroValor(c.acumulado)} de ${dinheiroValor(d.empresa.limiteAnual)} usados no limite de referência.</p></div><span class="marcador ${classeStatus}">${c.percentual||0}% do limite</span></div><div class="progresso"><span style="width:${pct}%"></span></div></div>
-  <div class="grade colunas-4">${estatistica('carteira','Receita do mês',dinheiroValor(c.receita),'ok')}${estatistica('recibo','Despesas do mês',dinheiroValor(c.despesas),'perigo')}${estatistica('grafico','Saldo do mês',dinheiroValor((c.receita||0)-(c.despesas||0)),'escuro')}${estatistica('escudo','Disponível no limite',dinheiroValor(Math.max(0,d.empresa.limiteAnual-(c.acumulado||0))),'ok')}</div>
-  <div class="grade colunas-2"><div class="painel"><h3>Resumo por mês</h3>${tabelaMeses(d.meses)}</div><div class="painel"><h3>Próximas obrigações</h3>${listaObrigacoes(d.obrigacoes)}</div></div>
+  const pct=Math.min(120,c.percentual||0)
+  const classeStatus=c.percentual>120?'perigo':c.percentual>=100?'alerta':c.percentual>=80?'alerta':'ok'
+  const primeiraAno = d.limiteProporcional && d.limiteProporcional < (d.empresa?.limiteAnual||81000)
+  const infoLimite = primeiraAno
+    ? `<p class="texto-guia" style="margin-top:4px">Sua empresa foi aberta no mês ${d.mesesAtivos ? 13 - d.mesesAtivos : '?'}. Limite proporcional este ano: <strong>${dinheiroValor(d.limiteProporcional)}</strong> (${d.mesesAtivos}/12 meses).</p>`
+    : ''
+  const infoRitmo = d.mesesRestantes && d.mesesRestantes > 0
+    ? `<p class="texto-guia" style="margin-top:4px">No ritmo atual (média de ${dinheiroValor(d.mediaMensal)}/mês), voce atingiria o limite em <strong>${d.mesesRestantes} meses</strong>.</p>`
+    : ''
+  const infoCpf = d.receitasCpf > 0
+    ? `<p class="texto-guia" style="margin-top:4px">Receitas via CPF relacionadas à atividade: ${dinheiroValor(d.receitasCpf)} (total fiscal: ${dinheiroValor(d.accCpf)}).</p>`
+    : ''
+  const avisoDas = d.dasConsecutivos?.consecutivos >= 2
+    ? `<div class="aviso-alerta"><strong>Atenção:</strong> ${d.dasConsecutivos.consecutivos} DAS consecutivos vencidos. Dois anos seguidos em débito podem levar ao cancelamento do CNPJ.</div>`
+    : ''
+  const dasnInfo = d.diasAteDasn !== null && d.diasAteDasn >= 0
+    ? `<div class="painel plano" style="margin-top:8px"><div class="secao-titulo compacto"><h3>DASN-SIMEI: ${d.diasAteDasn} dias restantes</h3><span class="marcador ${d.diasAteDasn<=30?'perigo':'alerta'}">até 31 de maio</span></div><ol class="lista-legal"><li>Acesse o Portal do Simples Nacional.</li><li>Informe seu CNPJ.</li><li>Informe o total de receita bruta do ano anterior (use o relatório abaixo).</li></ol></div>`
+    : ''
+  const reforma = `<div class="painel plano" style="margin-top:8px;border-left:3px solid var(--primario)"><p style="font-size:12px;color:var(--opaco);margin:0"><strong>Novo:</strong> A partir de 2027, a nota fiscal eletrônica será obrigatória em todas as vendas do MEI (inclusive para pessoa física). O regime de transição da Reforma Tributária (CBS/IBS) vai até 2033. Acompanhe atualizações no Portal do Empreendedor.</p></div>`
+  return `<div class="grade">${avisoDas}<div class="painel suave"><div class="secao-titulo"><div><h2>Faturamento acumulado de ${d.ano}</h2><p class="texto-guia">${dinheiroValor(c.acumulado)} de ${dinheiroValor(d.empresa.limiteAnual)} usados no limite de referência.${infoLimite}${infoRitmo}${infoCpf}</p></div><span class="marcador ${classeStatus}">${c.percentual||0}% do limite</span></div><div class="progresso"><span style="width:${pct}%"></span></div></div>
+  <div class="grade colunas-4">${estatistica('carteira','Receita do mês',dinheiroValor(c.receita),'ok')}${estatistica('recibo','Despesas do mês',dinheiroValor(c.despesas),'perigo')}${estatistica('grafico','Saldo do mês',dinheiroValor((c.receita||0)-(c.despesas||0)),'escuro')}${estatistica('escudo','Disponível no limite',dinheiroValor(Math.max(0,(d.empresa?.limiteAnual||81000)-(c.acumulado||0))),'ok')}</div>
+  <div class="grade colunas-2"><div class="painel"><h3>Resumo por mês</h3>${tabelaMeses(d.meses)}</div><div class="painel"><h3>Próximas obrigações</h3>${listaObrigacoesDashboard(d.obrigacoes)}</div></div>
+  ${dasnInfo}${reforma}
   <div class="painel"><h3>Últimos lançamentos</h3>${tabelaLancamentos(d.lancamentos,true)}</div></div>`
 }
 
+function listaObrigacoesDashboard(linhas=[]){
+  if(!linhas.length) return `<div class="vazio">Nenhuma obrigação pendente.</div>`
+  return `<div class="linha-do-tempo">${linhas.map(o=>{
+    const multaInfo = o.multa ? ` · Multa est.: ${dinheiroValor(o.multa)}` : ''
+    const atrasoInfo = o.diasAtraso > 0 ? ` · ${o.diasAtraso} dias atraso` : ''
+    return `<div class="nota"><div class="icone-estatistica">${icone('calendario')}</div><div><strong>${escaparHtml(o.titulo)}</strong><br><span>${dataFormatada(o.dataVencimento)} · ${dinheiroValor(o.valor)} · ${statusObrigacao(o.status)}${atrasoInfo}${multaInfo}</span></div></div>`
+  }).join('')}</div>`
+}
+}
+
 function visaoLancamentos(){
-  return `<div class="grade colunas-2"><div class="painel"><h2>Novo lançamento</h2><form id="formularioLancamento" class="formulario"><div class="campo"><label>Descrição</label><input id="tituloLancamento" name="title" required placeholder="Venda para cliente, compra de material, serviço recebido"></div><div class="linha"><div class="campo"><label>Data</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></div><div class="campo"><label>Tipo</label><select name="type"><option value="revenue">Receita</option><option value="expense">Despesa</option></select></div></div><div class="linha"><div class="campo"><label>Categoria</label><select name="category"><option>Prestação de Serviço</option><option>Venda de Produto</option><option>Imposto/DAS</option><option>Fornecedor</option><option>Equipamento</option><option>Marketing</option><option>Retirada do dono</option><option>Outros</option></select></div><div class="campo"><label>Valor</label><input name="amount" type="number" step="0.01" min="0.01" required></div></div><div class="linha"><div class="campo"><label>Cliente/fornecedor</label><input name="contactName"></div><div class="campo"><label>Forma de pagamento</label><select name="paymentMethod"><option>Pix</option><option>Cartão</option><option>Dinheiro</option><option>Transferência</option><option>Boleto</option></select></div></div><label class="check"><input type="checkbox" name="invoiceIssued"> Nota fiscal emitida</label><div class="campo"><label>Observações</label><textarea name="notes"></textarea></div><button class="btn primary bloco">Salvar lançamento</button></form></div><div class="painel"><h2>Lançamentos registrados</h2>${tabelaLancamentos(estado.lancamentos)}</div></div>`
+  return `<div class="grade colunas-2"><div class="painel"><h2>Novo lançamento</h2><form id="formularioLancamento" class="formulario"><div class="campo"><label>Descrição</label><input id="tituloLancamento" name="title" required placeholder="Venda para cliente, compra de material, serviço recebido"></div><div class="linha"><div class="campo"><label>Data</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></div><div class="campo"><label>Tipo</label><select name="type"><option value="revenue">Receita</option><option value="expense">Despesa</option></select></div></div><div class="linha"><div class="campo"><label>Categoria</label><select name="category"><option>Prestação de Serviço</option><option>Venda de Produto</option><option>Imposto/DAS</option><option>Fornecedor</option><option>Equipamento</option><option>Marketing</option><option>Retirada do dono</option><option>Outros</option></select></div><div class="campo"><label>Valor</label><input name="amount" type="number" step="0.01" min="0.01" required></div></div><div class="linha"><div class="campo"><label>Cliente/fornecedor</label><input name="contactName"></div><div class="campo"><label>Forma de pagamento</label><select name="paymentMethod"><option>Pix</option><option>Cartão</option><option>Dinheiro</option><option>Transferência</option><option>Boleto</option></select></div></div><label class="check"><input type="checkbox" name="invoiceIssued"> Nota fiscal emitida</label><label class="check"><input type="checkbox" name="cpfsReceita"> Esta receita veio como pessoa física (CPF), mas é da mesma atividade do meu MEI.</label><p class="texto-guia" style="font-size:10px;margin-top:-4px">Conforme Resolução CGSN 183/2025, rendimentos CPF da mesma atividade somam ao faturamento do CNPJ para fins de limite.</p><div class="campo"><label>Observações</label><textarea name="notes"></textarea></div><button class="btn primary bloco">Salvar lançamento</button></form></div><div class="painel"><h2>Lançamentos registrados</h2>${tabelaLancamentos(estado.lancamentos)}</div></div>`
 }
 
 function visaoObrigacoes(){
@@ -51,7 +79,9 @@ function visaoObrigacoes(){
 
 function visaoRelatorios(){
   const mes=new Date().getMonth()+1
-  return `<div class="grade colunas-2"><div class="painel"><h2>Gerar relatório mensal</h2><form id="formularioRelatorio" class="formulario"><div class="linha"><div class="campo"><label>Ano</label><input name="year" type="number" value="${new Date().getFullYear()}"></div><div class="campo"><label>Mês</label><select name="month">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i+1===mes?'selected':''}>${new Date(2026,i,1).toLocaleString('pt-BR',{month:'long'})}</option>`).join('')}</select></div></div><button class="btn primary">Gerar resumo</button></form></div><div class="painel" id="resultadoRelatorio"><div class="vazio">Escolha o período para gerar o resumo.</div></div></div>`
+  const anoAnterior = new Date().getFullYear() - 1
+  return `<div class="grade colunas-2"><div class="painel"><h2>Gerar relatório mensal</h2><form id="formularioRelatorio" class="formulario"><div class="linha"><div class="campo"><label>Ano</label><input name="year" type="number" value="${new Date().getFullYear()}"></div><div class="campo"><label>Mês</label><select name="month">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i+1===mes?'selected':''}>${new Date(2026,i,1).toLocaleString('pt-BR',{month:'long'})}</option>`).join('')}</select></div></div><button class="btn primary">Gerar resumo</button></form></div><div class="painel" id="resultadoRelatorio"><div class="vazio">Escolha o período para gerar o resumo.</div></div></div>
+  <div class="painel" style="margin-top:12px"><div class="secao-titulo"><div><h2>Resumo para DASN-SIMEI ${anoAnterior}</h2><p class="texto-guia">Use este resumo para preencher a declaração anual no Portal do Simples Nacional. A entrega vai de 1º de janeiro até 31 de maio de ${new Date().getFullYear()}.</p></div></div><button class="btn primary" id="btnGerarDasn">Gerar resumo DASN-SIMEI</button><div id="resultadoDasn" style="margin-top:12px"></div></div>`
 }
 
 function visaoSuporte(){
@@ -93,7 +123,17 @@ function tabelaUsuarios(){
 }
 
 function formularioPerfil(){
-  return `<form id="formularioPerfil" class="formulario"><div class="perfil-grande pequeno">${avatar(estado.usuario,'avatar grande')}<div><span class="marcador escuro">${escaparHtml(tipoMarcador(estado.usuario))}</span><div>${estrelas(estado.usuario?.mediaAvaliacao)} <strong>${estado.usuario?.mediaAvaliacao||'0.0'}</strong></div></div></div><div class="campo"><label>Nome</label><input name="name" value="${escaparHtml(estado.usuario?.nome||'')}"></div><div class="campo"><label>Telefone</label><input name="phone" value="${escaparHtml(estado.usuario?.telefone||'')}"></div><div class="campo"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><button class="btn primary bloco">Salvar perfil</button></form>`
+  return `<form id="formularioPerfil" class="formulario modo-leitura">
+    <div class="perfil-grande pequeno">${avatar(estado.usuario,'avatar grande')}<div><span class="marcador escuro">${escaparHtml(tipoMarcador(estado.usuario))}</span><div>${estrelas(estado.usuario?.mediaAvaliacao)} <strong>${estado.usuario?.mediaAvaliacao||'0.0'}</strong></div></div></div>
+    <div class="campo"><label>Nome</label><input name="name" value="${escaparHtml(estado.usuario?.nome||'')}" disabled></div>
+    <div class="campo"><label>Telefone</label><input name="phone" value="${escaparHtml(estado.usuario?.telefone||'')}" disabled></div>
+    <div class="campo"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled></div>
+    <div class="acoes-edicao">
+      <button type="button" class="btn" data-editar-formulario>Editar informações</button>
+      <button type="submit" class="btn primary" data-salvar-formulario style="display:none">Salvar perfil</button>
+      <button type="button" class="btn" data-cancelar-formulario style="display:none">Cancelar</button>
+    </div>
+  </form>`
 }
 
 function visaoNotificacoes(){
@@ -109,7 +149,9 @@ function visaoAssinatura(){
 }
 
 function visaoConta(){
-  return `<div class="grade colunas-2"><div class="painel"><h2>Perfil</h2>${formularioPerfil()}</div><div class="painel"><h2>Dados do MEI</h2><form id="formularioEmpresa" class="formulario"><div class="campo"><label>Razão/Nome do negócio</label><input name="businessName" value="${escaparHtml(estado.empresa?.nomeNegocio||'')}"></div><div class="campo"><label>Nome fantasia</label><input name="tradeName" value="${escaparHtml(estado.empresa?.nomeFantasia||'')}"></div><div class="linha"><div class="campo"><label>CNPJ</label><input name="cnpj" value="${escaparHtml(estado.empresa?.cnpj||'')}"></div><div class="campo"><label>Atividade</label><select name="activityType">${['Serviços','Comércio','Comércio + Serviços','Caminhoneiro'].map(x=>`<option ${estado.empresa?.tipoAtividade===x?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="linha"><div class="campo"><label>Limite anual</label><input name="annualLimit" type="number" step="0.01" value="${estado.empresa?.limiteAnual||81000}"></div><div class="campo"><label>Valor DAS mensal</label><input name="dasValue" type="number" step="0.01" value="${estado.empresa?.valorDas||86.05}"></div></div><button class="btn primary bloco">Salvar dados</button></form></div><div class="painel"><h2>Privacidade e cookies</h2><ul class="lista-legal"><li>Você pode exportar seus dados solicitando pelo suporte.</li><li>Você pode solicitar exclusão da conta, desde que não exista pagamento pendente.</li><li>Dados obrigatórios podem ser mantidos por prazo legal ou defesa de direitos.</li></ul><button class="btn" id="btnRedefinirCookie">Revisar cookies</button></div><div class="painel zona-perigo"><h2>Zona de risco</h2><p class="texto-guia">A exclusão desativa sua conta e inicia o processo de remoção dos dados não obrigatórios.</p><button class="btn perigo" id="btnExcluirConta">Solicitar exclusão da conta</button></div></div>`
+  const s=estado.assinatura||{}
+  const atrasado=s.status==='past_due'
+  return `<div class="grade colunas-2"><div class="painel"><h2>Perfil</h2>${formularioPerfil()}</div><div class="painel"><h2>Dados do MEI</h2><form id="formularioEmpresa" class="formulario modo-leitura"><div class="campo"><label>Razao/Nome do negocio</label><input name="businessName" value="${escaparHtml(estado.empresa?.nomeNegocio||'')}" disabled></div><div class="campo"><label>Nome fantasia</label><input name="tradeName" value="${escaparHtml(estado.empresa?.nomeFantasia||'')}" disabled></div><div class="linha"><div class="campo"><label>CNPJ</label><input name="cnpj" value="${escaparHtml(estado.empresa?.cnpj||'')}" disabled></div><div class="campo"><label>Atividade</label><select name="activityType" disabled>${['Servicos','Comercio','Comercio + Servicos','Caminhoneiro'].map(x=>`<option ${estado.empresa?.tipoAtividade===x?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="linha"><div class="campo"><label>Limite anual</label><input name="annualLimit" type="number" step="0.01" value="${estado.empresa?.limiteAnual||81000}" disabled></div><div class="campo"><label>Valor DAS mensal</label><input name="dasValue" type="number" step="0.01" value="${estado.empresa?.valorDas||86.05}" disabled></div></div><div class="acoes-edicao"><button type="button" class="btn" data-editar-formulario>Editar informações</button><button type="submit" class="btn primary" data-salvar-formulario style="display:none">Salvar dados</button><button type="button" class="btn" data-cancelar-formulario style="display:none">Cancelar</button></div></form></div><div class="painel"><h2>Seguranca</h2>${secaoSeguranca()}</div><div class="painel"><h2>Assinatura e cobranca</h2>${atrasado?`<div class="aviso-alerta">Seu pagamento esta pendente. Regularize para continuar usando todos os recursos do sistema.</div>`:''}<div class="linha-kpi"><span>Status</span>${marcadorStatus(s.status||'pending_checkout')}</div><div class="linha-kpi"><span>Plano</span><strong>${escaparHtml(s.nomePlano||'Plano Pro MEI no Controle')}</strong></div><div class="linha-kpi"><span>Valor</span><strong>${dinheiroValor(s.preco||24.9)}/mes</strong></div><div class="linha-kpi"><span>Fim do teste</span><strong>${s.fimTesteEm?new Date(s.fimTesteEm).toLocaleString('pt-BR'):'Apos checkout validado'}</strong></div><div class="linha-kpi"><span>Proxima cobranca</span><strong>${s.proximaCobrancaEm?new Date(s.proximaCobrancaEm).toLocaleString('pt-BR'):'Pendente'}</strong></div><div class="mini-acoes" style="margin-top:14px"><button class="btn primary" id="btnIniciarTeste">${['trialing','active'].includes(s.status)?'Assinatura liberada':'Iniciar teste com checkout'}</button>${s.urlCheckout?`<a class="btn" href="${s.urlCheckout}" target="_blank">Abrir checkout</a>`:''}<button class="btn perigo" id="btnCancelarPlano">Cancelar assinatura</button></div></div><div class="painel"><h2>Privacidade e cookies</h2><ul class="lista-legal"><li>Voce pode exportar seus dados solicitando pelo suporte.</li><li>Voce pode solicitar exclusao da conta, desde que nao exista pagamento pendente.</li><li>Dados obrigatorios podem ser mantidos por prazo legal ou defesa de direitos.</li></ul><button class="btn" id="btnRedefinirCookie">Revisar cookies</button></div><div class="painel zona-perigo"><h2>Zona de risco</h2><p class="texto-guia">A exclusao desativa sua conta e inicia o processo de remocao dos dados nao obrigatorios.</p><button class="btn perigo" id="btnExcluirConta">Solicitar exclusao da conta</button></div></div>`
 }
 
 function visaoAdmin(){
@@ -141,7 +183,22 @@ function modalChamado(){
 
 function visaoBloqueio(){
   if(estado.assinatura?.status==='past_due'){
-    return `<div class="bloqueio"><div><h2>Pagamento pendente</h2><p>Seu plano está com pagamento em atraso. Regularize a assinatura para liberar todos os recursos do painel.</p></div><div><button class="btn primary bloco" onclick="mudarAba('assinatura')">Ver assinatura</button><button class="btn bloco" onclick="mudarAba('suporte')">Falar com suporte</button></div></div>`
+    return `<div class="bloqueio"><div><h2>Pagamento pendente</h2><p>Seu plano está com pagamento em atraso. Regularize a assinatura para liberar todos os recursos do painel.</p></div><div><button class="btn primary bloco" onclick="mudarAba('conta')">Ver assinatura</button><button class="btn bloco" onclick="mudarAba('suporte')">Falar com suporte</button></div></div>`
   }
   return `<div class="bloqueio"><div><h2>Finalize o checkout para liberar o painel</h2><p>Seu cadastro está pronto. Para iniciar o teste grátis de 7 dias, valide o método de pagamento pelo checkout seguro.</p><div class="mini-acoes"><span class="marcador ok">7 dias grátis</span><span class="marcador ok">Dados salvos</span><span class="marcador ok">Cancelamento pela conta</span></div></div><div><button class="btn primary bloco" id="btnIniciarTeste">Iniciar teste com checkout</button><button class="btn bloco" onclick="mudarAba('suporte')">Falar com suporte</button></div></div>`
+}
+
+function secaoSeguranca(){
+  const u = estado.usuario || {}
+  if(estado.codigosBackup2fa){
+    return `<div><p class="texto-guia"><strong>2FA ativado!</strong> Guarde estes codigos de backup em local seguro:</p><pre style="background:#f5f5f5;padding:12px;border-radius:8px;overflow-x:auto">${(estado.codigosBackup2fa||[]).join('\n')}</pre><button class="btn bloco" onclick="estado.codigosBackup2fa=null;renderizarApp()">Entendi</button></div>`
+  }
+  if(u.totpAtivo){
+    return `<p class="texto-guia">Autenticacao de dois fatores esta <strong>ativa</strong>.</p>
+      <form id="formularioDesativar2fa" class="formulario"><div class="campo"><label>Senha atual</label><input name="senha" type="password" required></div><button class="btn perigo bloco">Desativar 2FA</button></form>`
+  }
+  if(estado.qrCode2fa){
+    return `<div style="text-align:center"><img src="${estado.qrCode2fa}" alt="QR Code 2FA" style="max-width:200px;margin-bottom:12px"><p class="texto-guia">Escaneie o QR code com Google Authenticator ou use o codigo manual: <code style="word-break:break-all">${escaparHtml(estado.segredoManual2fa||'')}</code></p><form id="formularioConfirmar2fa" class="formulario"><div class="campo"><label>Codigo do aplicativo</label><input name="codigo" required inputmode="numeric" maxlength="6"></div><button class="btn primary bloco">Ativar 2FA</button></form></div>`
+  }
+  return `<button class="btn bloco" id="btnIniciar2fa">Ativar autenticacao de dois fatores</button>`
 }

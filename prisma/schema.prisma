@@ -1,0 +1,271 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String    @id
+  name                    String
+  email                   String    @unique
+  role                    String
+  passwordHash            String
+  status                  String
+  phone                   String    @default("")
+  cpfCnpj                 String    @default("")
+  forcePasswordChange     Boolean   @default(false)
+  avatarUrl               String    @default("")
+  emailVerificado         Boolean   @default(false)
+  codigoVerificacaoHash   String?
+  codigoVerificacaoExpira DateTime?
+  codigoRecuperacaoHash   String?
+  codigoRecuperacaoExpira DateTime?
+  tentativasLoginFalhas   Int       @default(0)
+  bloqueadoAte            DateTime?
+  totpSecret              String?
+  totpAtivo               Boolean   @default(false)
+  totpCodigosBackup       String[]  @default([])
+  createdAt               DateTime
+  updatedAt               DateTime
+  lastLoginAt             DateTime?
+  deletedAt               DateTime?
+  originalEmail           String?
+
+  @@map("users")
+}
+
+model Company {
+  id            String   @id
+  userId        String
+  businessName  String
+  tradeName     String
+  cnpj          String
+  activityType  String
+  annualLimit   Float
+  dasValue      Float
+  year          Int
+  mesAbertura   Int      @default(1)
+  createdAt     DateTime
+  updatedAt     DateTime
+
+  @@map("companies")
+}
+
+model Subscription {
+  id                    String    @id
+  userId                String
+  provider              String
+  status                String
+  planName              String
+  price                 Float
+  trialStartAt          DateTime?
+  trialEndAt            DateTime?
+  nextBillingAt         DateTime?
+  externalId            String    @default("")
+  checkoutUrl           String    @default("")
+  lastPaymentConfirmedAt DateTime?
+  canceledAt            DateTime?
+  providerCheckoutId    String    @default("")
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String   @id
+  userId         String
+  subscriptionId String
+  provider       String
+  event          String
+  amount         Float
+  status         String
+  externalId     String
+  payload        Json
+  createdAt      DateTime
+
+  @@map("payments")
+}
+
+model Launch {
+  id             String   @id
+  userId         String
+  title          String
+  date           String
+  type           String
+  category       String
+  amount         Float
+  contactName    String   @default("")
+  invoiceIssued  Boolean  @default(false)
+  paymentMethod  String   @default("Pix")
+  notes          String   @default("")
+  cpfsReceita    Boolean  @default(false)
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@map("launches")
+}
+
+model Obligation {
+  id          String   @id
+  userId      String
+  title       String
+  type        String
+  dueDate     String
+  amount      Float
+  status      String
+  receiptUrl  String   @default("")
+  createdAt   DateTime
+  updatedAt   DateTime
+
+  @@map("obligations")
+}
+
+model Notification {
+  id        String   @id
+  userId    String
+  type      String
+  title     String
+  body      String
+  key       String   @default("")
+  target    Json?
+  read      Boolean  @default(false)
+  createdAt DateTime
+
+  @@map("notifications")
+}
+
+model Ticket {
+  id               String    @id
+  protocol         String
+  type             String
+  title            String
+  category         String
+  status           String
+  priority         String
+  customerId       String
+  assigneeId       String?
+  estimatedMinutes Int?
+  urgentAt         DateTime?
+  createdAt        DateTime
+  updatedAt        DateTime
+  closedAt         DateTime?
+  closedBy         String?
+
+  @@map("tickets")
+}
+
+model Message {
+  id         String   @id
+  ticketId   String
+  senderId   String
+  text       String   @default("")
+  attachment Json?
+  system     Boolean  @default(false)
+  createdAt  DateTime
+
+  @@map("messages")
+}
+
+model TicketFeedback {
+  id         String   @id
+  ticketId   String
+  customerId String
+  assigneeId String?
+  rating     Int
+  comment    String   @default("")
+  createdAt  DateTime
+
+  @@map("ticketFeedbacks")
+}
+
+model FlaggedUser {
+  id        String   @id
+  userId    String
+  createdBy String
+  text      String
+  createdAt DateTime
+
+  @@map("flaggedUsers")
+}
+
+model Template {
+  id        String   @id
+  createdBy String
+  title     String
+  text      String
+  createdAt DateTime
+
+  @@map("templates")
+}
+
+model TeamConversation {
+  id         String   @id
+  type       String
+  title      String
+  createdBy  String
+  adminId    String
+  members    Json
+  deletedFor String[] @default([])
+  createdAt  DateTime
+  updatedAt  DateTime
+
+  @@map("teamConversations")
+}
+
+model TeamMessage {
+  id             String   @id
+  conversationId String
+  senderId       String
+  text           String   @default("")
+  attachment     Json?
+  system         Boolean  @default(false)
+  createdAt      DateTime
+
+  @@map("teamMessages")
+}
+
+model LegalAcceptance {
+  id         String   @id
+  userId     String
+  type       String
+  version    String
+  acceptedAt DateTime
+  ip         String   @default("")
+
+  @@map("legalAcceptances")
+}
+
+model CookieConsent {
+  id        String   @id
+  userId    String
+  necessary Boolean
+  analytics Boolean
+  marketing Boolean
+  version   String
+  createdAt DateTime
+
+  @@map("cookieConsents")
+}
+
+model AuditLog {
+  id        String   @id
+  actorId   String?
+  action    String
+  meta      Json
+  createdAt DateTime
+
+  @@map("auditLogs")
+}
+
+model Meta {
+  id        String   @id
+  version   Int
+  createdAt DateTime
+  updatedAt DateTime
+
+  @@map("meta")
+}

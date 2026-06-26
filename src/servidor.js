@@ -7,6 +7,10 @@ const { lerBanco, escreverBanco, comBanco, criarEmpresaPadrao, criarObrigacoesPa
 const { gerarHashSenha, verificarSenha, assinarToken, verificarToken, temPermissao, usuarioPublico, CARGOS } = require('./autenticacao');
 const { uid, agoraISO, apenasDigitos, dinheiro, adicionarDias, anoMesDia, textoLimpo, protocolo } = require('./utilidades');
 const { criarCheckout, criarLinkPagamento } = require('./asaas');
+const { enviarEmail } = require('./email');
+const { PARAMETROS_FISCAIS_2026 } = require('./parametrosFiscais');
+const QRCode = require('qrcode');
+const { gerarSegredoBase32, gerarCodigoTotp, verificarCodigoTotp } = require('./totp');
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const MIME = {
@@ -257,6 +261,7 @@ function dashboardData(db, userId) {
   const company = companyFor(db, userId);
   const year = Number(company?.year || new Date().getFullYear());
   let acc = 0;
+  let accCpf = 0;
   const launches = db.launches.filter(l => l.userId === userId && new Date(l.date).getFullYear() === year);
   const months = MESES.map((name, idx) => {
     const month = idx + 1;
@@ -265,15 +270,77 @@ function dashboardData(db, userId) {
     const expenses = dinheiro(monthLaunches.filter(l => l.type === 'expense').reduce((s, l) => s + Number(l.amount || 0), 0));
     acc = dinheiro(acc + revenue);
     const percent = Math.round((acc / Number(company?.annualLimit || 81000)) * 100);
-    return { month, nome: name, receita: revenue, despesas: expenses, acumulado: acc, percentual: percent, name, revenue, expenses, accumulated: acc, percent, status: percent > 100 ? 'limit_exceeded' : percent > 80 ? 'warning' : 'ok' };
+    return { month, nome: name, receita: revenue, despesas: expenses, acumulado: acc, percentual: percent, name, revenue, expenses, accumulated: acc, percent, status: percent > 120 ? 'limit_exceeded' : percent > 100 ? 'warning' : percent > 80 ? 'warning' : 'ok' };
   });
   const current = months[new Date().getMonth()];
+  const mesAbertura = company?.mesAbertura || 1;
+  const mesesAtivos = Math.min(12, Math.max(1, 13 - mesAbertura));
+  const limiteProporcional = Math.round((Number(company?.annualLimit || 81000) / 12) * mesesAtivos);
+  const receitasCpf = launches.filter(l => l.type === 'revenue' && l.cpfsReceita).reduce((s, l) => s + Number(l.amount || 0), 0);
+  accCpf = dinheiro(acc + receitasCpf);
+  const receitasMesAtual = launches.filter(l => l.type === 'revenue' && new Date(`${l.date}T12:00:00`).getMonth() + 1 === new Date().getMonth() + 1);
+  const mediaMensal = months.filter(m => m.receita > 0).length > 0
+    ? months.reduce((s, m) => s + m.receita, 0) / months.filter(m => m.receita > 0).length
+    : 0;
+  const mesesRestantes = mediaMensal > 0 ? Math.ceil((Number(company?.annualLimit || 81000) - acc) / mediaMensal) : null;
   const obligations = db.obligations.filter(o => o.userId === userId).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-  const pendingObligations = obligations.filter(o => o.status !== 'paid').slice(0, 8);
+  const pendingObligations = obligations.filter(o => o.status !== 'paid').slice(0, 8).map(o => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const venc = new Date(o.dueDate + 'T00:00:00');
+    const diasAtraso = Math.max(0, Math.floor((hoje - venc) / 86400000));
+    const multa = o.type === 'DAS Mensal' && o.status === 'pending' && diasAtraso > 0 ? Math.round(o.amount * Math.min(diasAtraso * 0.0033, 0.20) * 100) / 100 : null;
+    return { ...o, titulo: o.title, dataVencimento: o.dueDate, valor: o.amount, urlComprovante: o.receiptUrl, tipo: o.type, diasAtraso, multa };
+  });
+  const dasnObrigacao = obligations.find(o => o.type === 'DASN-SIMEI Anual' && new Date(o.dueDate).getFullYear() === new Date().getFullYear());
+  const diasAteDasn = dasnObrigacao && dasnObrigacao.status !== 'paid' ? Math.ceil((new Date(dasnObrigacao.dueDate + 'T00:00:00') - new Date()) / 86400000) : null;
+  const dasConsecutivos = verificarDasConsecutivos(db, userId);
   return {
-    empresa: company, ano: year, meses: months, atual: current, obrigacoes: pendingObligations.map(o => ({ ...o, titulo: o.title, dataVencimento: o.dueDate, valor: o.amount, urlComprovante: o.receiptUrl, tipo: o.type })), lancamentos: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12).map(l => ({ ...l, data: l.date, titulo: l.title, tipo: l.type, categoria: l.category, valor: l.amount })),
-    company, year, months, current, launches: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12), obligations: pendingObligations
+    empresa: company, ano: year, meses: months, atual: current, obrigacoes: pendingObligations, lancamentos: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12).map(l => ({ ...l, data: l.date, titulo: l.title, tipo: l.type, categoria: l.category, valor: l.amount, cpfsReceita: l.cpfsReceita })),
+    company, year, months, current, launches: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12), obligations: pendingObligations,
+    limiteProporcional, mesesAtivos, receitasCpf, accCpf, mediaMensal, mesesRestantes, diasAteDasn, dasConsecutivos, reformaTributaria: true
   };
+}
+
+function verificarAlertasLimite(db, userId) {
+  const company = companyFor(db, userId);
+  if (!company) return;
+  const year = new Date().getFullYear();
+  const launches = db.launches.filter(l => l.userId === userId && new Date(l.date).getFullYear() === year);
+  const receitaTotal = launches.filter(l => l.type === 'revenue').reduce((s, l) => s + Number(l.amount || 0), 0);
+  const receitaCpf = launches.filter(l => l.type === 'revenue' && l.cpfsReceita).reduce((s, l) => s + Number(l.amount || 0), 0);
+  const totalFiscal = dinheiro(receitaTotal + receitaCpf);
+  const limite = Number(company?.annualLimit || 81000);
+  const pct = Math.round((totalFiscal / limite) * 100);
+  if (pct >= 120) {
+    adicionarNotificacao(db, userId, 'billing', 'URGENTE: Risco de desenquadramento',
+      `Seu faturamento acumulado (R$ ${dinheiroValor(totalFiscal)}) ultrapassou 120% do limite anual. O desenquadramento é RETROATIVO a janeiro, com multas e juros. Procure um contador IMEDIATAMENTE.`,
+      `limite-urgente-${year}`);
+  } else if (pct >= 100) {
+    adicionarNotificacao(db, userId, 'billing', 'Atenção: Limite anual ultrapassado',
+      `Voce ja ultrapassou o limite de R$ ${dinheiroValor(limite)}. Ate 20%% de tolerancia (R$ ${dinheiroValor(limite * 0.2)}) voce continua como MEI, mas pagara DAS complementar sobre o excedente.`,
+      `limite-atencao-${year}`);
+  } else if (pct >= 80) {
+    adicionarNotificacao(db, userId, 'billing', 'Alerta: 80%% do limite anual utilizado',
+      `Voce ja usou ${pct}%% do limite anual de R$ ${dinheiroValor(limite)}. Fique atento para nao ultrapassar o teto do MEI.`,
+      `limite-80-${year}`);
+  }
+}
+
+function verificarDasConsecutivos(db, userId) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const vencidos = db.obligations
+    .filter(o => o.userId === userId && o.type === 'DAS Mensal' && o.status === 'pending')
+    .filter(o => new Date(o.dueDate + 'T00:00:00') < hoje)
+    .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+  let consecutivos = 0;
+  for (const o of vencidos) {
+    const venc = new Date(o.dueDate + 'T00:00:00');
+    if (consecutivos === 0) { consecutivos = 1; continue; }
+    const anterior = new Date(vencidos[consecutivos - 2]?.dueDate + 'T00:00:00');
+    const diffMeses = (anterior.getFullYear() - venc.getFullYear()) * 12 + (anterior.getMonth() - venc.getMonth());
+    if (diffMeses <= 1) consecutivos++; else break;
+  }
+  return { total: vencidos.length, consecutivos };
 }
 
 function canAccessTicket(user, ticket) {
@@ -289,7 +356,7 @@ function ticketPrefix(type) { return type === 'report' ? 'MOD' : 'SUP'; }
 async function handleApi(req, res, url) {
   const pathname = url.pathname;
   const method = req.method;
-  const db = lerBanco();
+  const db = await lerBanco();
 
   try {
     if (method === 'GET' && pathname === '/api/health') {
@@ -306,31 +373,193 @@ async function handleApi(req, res, url) {
       const email = textoLimpo(body.email, 180).toLowerCase();
       const password = String(body.password || '');
       const cnpj = apenasDigitos(body.cnpj || '');
-      if (!name || !email.includes('@') || password.length < 8) return fail(res, 400, 'Informe nome, e-mail válido e senha com no mínimo 8 caracteres.');
-      if (!body.acceptTerms) return fail(res, 400, 'É necessário aceitar os Termos de Uso e a Política de Privacidade.');
-      if (db.users.some(u => u.email === email)) return fail(res, 409, 'Já existe uma conta com este e-mail.');
-      const user = { id: uid('usr'), name, email, role: CARGOS.CUSTOMER, passwordHash: gerarHashSenha(password), status: 'active', phone: textoLimpo(body.phone, 30), cpfCnpj: cnpj, forcePasswordChange: false, createdAt: agoraISO(), updatedAt: agoraISO(), lastLoginAt: null };
+      if (!name || !email.includes('@') || password.length < 8) return fail(res, 400, 'Informe nome, e-mail valido e senha com no minimo 8 caracteres.');
+      if (!body.acceptTerms) return fail(res, 400, 'E necessario aceitar os Termos de Uso e a Politica de Privacidade.');
+      if (db.users.some(u => u.email === email)) return fail(res, 409, 'Ja existe uma conta com este e-mail.');
+      const codigo = String(Math.floor(100000 + Math.random() * 900000));
+      const codigoHash = gerarHashSenha(codigo);
+      const codigoExpira = new Date(Date.now() + 15 * 60000).toISOString();
+      const emailJaVerificado = !cfg.smtpPass; // dev mode: auto-verifica
+      const user = { id: uid('usr'), name, email, role: CARGOS.CUSTOMER, passwordHash: gerarHashSenha(password), status: 'active', phone: textoLimpo(body.phone, 30), cpfCnpj: cnpj, forcePasswordChange: false, emailVerificado: emailJaVerificado, codigoVerificacaoHash: emailJaVerificado ? null : codigoHash, codigoVerificacaoExpira: emailJaVerificado ? null : codigoExpira, codigoRecuperacaoHash: null, codigoRecuperacaoExpira: null, tentativasLoginFalhas: 0, bloqueadoAte: null, totpSecret: null, totpAtivo: false, totpCodigosBackup: [], avatarUrl: '', createdAt: agoraISO(), updatedAt: agoraISO(), lastLoginAt: null };
       db.users.push(user);
-      const company = criarEmpresaPadrao(user, { businessName: body.businessName || name, tradeName: body.tradeName || 'Meu negócio', cnpj, activityType: body.activityType || 'Serviços' });
+      const company = criarEmpresaPadrao(user, { businessName: body.businessName || name, tradeName: body.tradeName || 'Meu negocio', cnpj, activityType: body.activityType || 'Servicos' });
       db.companies.push(company);
       db.obligations.push(...criarObrigacoesPadrao(user.id, company.year, company.dasValue));
       db.subscriptions.push({ id: uid('sub'), userId: user.id, provider: cfg.paymentMock ? 'mock' : 'asaas', status: 'pending_checkout', planName: cfg.planName, price: cfg.planPrice, trialStartAt: null, trialEndAt: null, nextBillingAt: null, externalId: '', checkoutUrl: '', lastPaymentConfirmedAt: null, createdAt: agoraISO(), updatedAt: agoraISO() });
       db.legalAcceptances.push({ id: uid('leg'), userId: user.id, type: 'terms_privacy', version: legalTexts().version, acceptedAt: agoraISO(), ip: req.socket.remoteAddress || '' });
       auditar(db, user.id, 'auth.register', { email });
-      escreverBanco(db);
+      await escreverBanco(db);
+      if (!cfg.smtpPass) {
+        const token = assinarToken({ userId: user.id, role: user.role });
+        return ok(res, { user: exposeUser(db, user), company, subscription: subscriptionFor(db, user.id), token });
+      }
+      enviarEmail(email, 'Confirme seu e-mail — MEI no Controle',
+        `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2>MEI no Controle</h2>
+          <p>Ola, ${name}!</p>
+          <p>Use o codigo abaixo para confirmar seu e-mail:</p>
+          <div style="background:#f5f5f5;padding:16px;border-radius:8px;text-align:center;font-size:28px;letter-spacing:4px;font-weight:bold">${codigo}</div>
+          <p style="color:#666;font-size:14px">Valido por 15 minutos. Se voce nao criou esta conta, ignore este e-mail.</p>
+        </div>`
+      ).catch(() => {});
+      return ok(res, { precisaVerificarEmail: true, email });
+    }
+
+    if (method === 'POST' && pathname === '/api/auth/verificar-email') {
+      const body = await readBody(req);
+      const email = textoLimpo(body.email, 180).toLowerCase();
+      const codigo = textoLimpo(body.codigo, 10);
+      if (!email || !codigo) return fail(res, 400, 'Informe e-mail e codigo de verificacao.');
+      const user = db.users.find(u => u.email === email && u.status === 'active');
+      if (!user) return fail(res, 404, 'Conta nao encontrada.');
+      if (user.emailVerificado) return fail(res, 409, 'E-mail ja foi verificado. Faca login.');
+      if (!user.codigoVerificacaoHash || !user.codigoVerificacaoExpira) return fail(res, 400, 'Nenhum codigo pendente. Solicite um novo.');
+      if (new Date(user.codigoVerificacaoExpira) < new Date()) return fail(res, 400, 'Codigo expirado. Solicite um novo.');
+      if (!verificarSenha(codigo, user.codigoVerificacaoHash)) return fail(res, 400, 'Codigo invalido.');
+      user.emailVerificado = true;
+      user.codigoVerificacaoHash = null;
+      user.codigoVerificacaoExpira = null;
+      user.updatedAt = agoraISO();
+      auditar(db, user.id, 'auth.email_verified', { email });
+      await escreverBanco(db);
       const token = assinarToken({ userId: user.id, role: user.role });
-      return ok(res, { user: exposeUser(db, user), company, subscription: subscriptionFor(db, user.id), token });
+      return ok(res, { user: exposeUser(db, user), company: companyFor(db, user.id), subscription: subscriptionFor(db, user.id), token });
+    }
+
+    if (method === 'POST' && pathname === '/api/auth/reenviar-codigo') {
+      const body = await readBody(req);
+      const email = textoLimpo(body.email, 180).toLowerCase();
+      if (!email) return fail(res, 400, 'Informe o e-mail.');
+      const user = db.users.find(u => u.email === email && u.status === 'active');
+      if (!user) return ok(res, {}); // nao revela se existe
+      if (user.emailVerificado) return ok(res, { jaVerificado: true });
+      if (user.codigoVerificacaoExpira && new Date(user.codigoVerificacaoExpira) > new Date(Date.now() - 60000)) return fail(res, 429, 'Aguarde 1 minuto para solicitar um novo codigo.');
+      const codigo = String(Math.floor(100000 + Math.random() * 900000));
+      user.codigoVerificacaoHash = gerarHashSenha(codigo);
+      user.codigoVerificacaoExpira = new Date(Date.now() + 15 * 60000).toISOString();
+      user.updatedAt = agoraISO();
+      await escreverBanco(db);
+      enviarEmail(email, 'Confirme seu e-mail — MEI no Controle',
+        `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2>MEI no Controle</h2>
+          <p>Use o codigo abaixo para confirmar seu e-mail:</p>
+          <div style="background:#f5f5f5;padding:16px;border-radius:8px;text-align:center;font-size:28px;letter-spacing:4px;font-weight:bold">${codigo}</div>
+          <p style="color:#666;font-size:14px">Valido por 15 minutos.</p>
+        </div>`
+      ).catch(() => {});
+      return ok(res, {});
+    }
+
+    if (method === 'POST' && pathname === '/api/auth/esqueci-senha') {
+      const body = await readBody(req);
+      const email = textoLimpo(body.email, 180).toLowerCase();
+      if (!email) return fail(res, 400, 'Informe o e-mail.');
+      const user = db.users.find(u => u.email === email && u.status === 'active');
+      if (user) {
+        const codigo = String(Math.floor(100000 + Math.random() * 900000));
+        user.codigoRecuperacaoHash = gerarHashSenha(codigo);
+        user.codigoRecuperacaoExpira = new Date(Date.now() + 30 * 60000).toISOString();
+        user.updatedAt = agoraISO();
+        await escreverBanco(db);
+        enviarEmail(email, 'Recuperacao de senha — MEI no Controle',
+          `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+            <h2>MEI no Controle</h2>
+            <p>Use o codigo abaixo para redefinir sua senha:</p>
+            <div style="background:#f5f5f5;padding:16px;border-radius:8px;text-align:center;font-size:28px;letter-spacing:4px;font-weight:bold">${codigo}</div>
+            <p style="color:#666;font-size:14px">Valido por 30 minutos. Se voce nao solicitou, ignore este e-mail.</p>
+          </div>`
+        ).catch(() => {});
+      }
+      return ok(res, {});
+    }
+
+    if (method === 'POST' && pathname === '/api/auth/redefinir-senha') {
+      const body = await readBody(req);
+      const email = textoLimpo(body.email, 180).toLowerCase();
+      const codigo = textoLimpo(body.codigo, 10);
+      const novaSenha = String(body.novaSenha || '');
+      if (!email || !codigo || novaSenha.length < 8) return fail(res, 400, 'Informe e-mail, codigo e nova senha com no minimo 8 caracteres.');
+      const user = db.users.find(u => u.email === email && u.status === 'active');
+      if (!user) return fail(res, 400, 'Dados invalidos.');
+      if (!user.codigoRecuperacaoHash || !user.codigoRecuperacaoExpira) return fail(res, 400, 'Nenhuma solicitacao de recuperacao pendente.');
+      if (new Date(user.codigoRecuperacaoExpira) < new Date()) return fail(res, 400, 'Codigo expirado. Solicite novamente.');
+      if (!verificarSenha(codigo, user.codigoRecuperacaoHash)) return fail(res, 400, 'Codigo invalido.');
+      user.passwordHash = gerarHashSenha(novaSenha);
+      user.codigoRecuperacaoHash = null;
+      user.codigoRecuperacaoExpira = null;
+      user.tentativasLoginFalhas = 0;
+      user.bloqueadoAte = null;
+      user.updatedAt = agoraISO();
+      auditar(db, user.id, 'auth.password_reset', { email });
+      await escreverBanco(db);
+      return ok(res, { message: 'Senha redefinida com sucesso. Faca login.' });
     }
 
     if (method === 'POST' && pathname === '/api/auth/login') {
       const body = await readBody(req);
       const email = textoLimpo(body.email, 180).toLowerCase();
+      const password = String(body.password || '');
       const user = db.users.find(u => u.email === email && u.status === 'active');
-      if (!user || !verificarSenha(body.password || '', user.passwordHash)) return fail(res, 401, 'E-mail ou senha inválidos.');
+      if (!user) return fail(res, 401, 'E-mail ou senha invalidos.');
+      if (user.bloqueadoAte && new Date(user.bloqueadoAte) > new Date()) {
+        const minutosRestantes = Math.ceil((new Date(user.bloqueadoAte) - new Date()) / 60000);
+        return fail(res, 429, `Conta temporariamente bloqueada. Tente novamente em ${minutosRestantes} minuto(s).`);
+      }
+      if (!user.emailVerificado) return fail(res, 400, 'Confirme seu e-mail antes de entrar.', { precisaVerificarEmail: true });
+      const senhaOk = verificarSenha(password, user.passwordHash);
+      if (!senhaOk) {
+        user.tentativasLoginFalhas = (user.tentativasLoginFalhas || 0) + 1;
+        if (user.tentativasLoginFalhas >= 5) {
+          user.bloqueadoAte = new Date(Date.now() + 15 * 60000).toISOString();
+          user.tentativasLoginFalhas = 0;
+          user.updatedAt = agoraISO();
+          auditar(db, user.id, 'auth.login_blocked', { email });
+          await escreverBanco(db);
+          return fail(res, 429, 'Conta bloqueada por 15 minutos apos 5 tentativas invalidas.');
+        }
+        user.updatedAt = agoraISO();
+        await escreverBanco(db);
+        return fail(res, 401, 'E-mail ou senha invalidos.');
+      }
+      user.tentativasLoginFalhas = 0;
+      user.bloqueadoAte = null;
       user.lastLoginAt = agoraISO(); user.updatedAt = agoraISO();
       atualizarStatusAssinatura(db, user.id);
       auditar(db, user.id, 'auth.login', { email });
-      escreverBanco(db);
+      await escreverBanco(db);
+      if (user.totpAtivo) {
+        const tokenTemp = assinarToken({ userId: user.id, pendente2fa: true }, 300);
+        return ok(res, { pendente2fa: true, tokenTemporario: tokenTemp });
+      }
+      const token = assinarToken({ userId: user.id, role: user.role });
+      return ok(res, { user: exposeUser(db, user), company: companyFor(db, user.id), subscription: subscriptionFor(db, user.id), token });
+    }
+
+    if (method === 'POST' && pathname === '/api/auth/2fa/validar') {
+      const body = await readBody(req);
+      const tokenTemp = textoLimpo(body.tokenTemporario, 500);
+      const codigo = textoLimpo(body.codigo, 20);
+      if (!tokenTemp || !codigo) return fail(res, 400, 'Informe o token temporario e o codigo 2FA.');
+      const payloadTemp = verificarToken(tokenTemp);
+      if (!payloadTemp?.userId || !payloadTemp.pendente2fa) return fail(res, 401, 'Token temporario invalido ou expirado.');
+      const user = db.users.find(u => u.id === payloadTemp.userId && u.status === 'active');
+      if (!user) return fail(res, 401, 'Usuario nao encontrado.');
+      let codigoValido = false;
+      if (user.totpAtivo && user.totpSecret) {
+        codigoValido = verificarCodigoTotp(user.totpSecret, codigo);
+      }
+      if (!codigoValido && Array.isArray(user.totpCodigosBackup) && user.totpCodigosBackup.length > 0) {
+        const backupIdx = user.totpCodigosBackup.findIndex(hash => verificarSenha(codigo, hash));
+        if (backupIdx >= 0) {
+          codigoValido = true;
+          user.totpCodigosBackup.splice(backupIdx, 1);
+        }
+      }
+      if (!codigoValido) return fail(res, 400, 'Codigo 2FA invalido.');
+      user.lastLoginAt = agoraISO(); user.updatedAt = agoraISO();
+      atualizarStatusAssinatura(db, user.id);
+      auditar(db, user.id, 'auth.login_2fa', {});
+      await escreverBanco(db);
       const token = assinarToken({ userId: user.id, role: user.role });
       return ok(res, { user: exposeUser(db, user), company: companyFor(db, user.id), subscription: subscriptionFor(db, user.id), token });
     }
@@ -365,15 +594,31 @@ async function handleApi(req, res, url) {
         sub.updatedAt = agoraISO();
         db.payments.push({ id: uid('pay'), userId: sub.userId, subscriptionId: sub.id, provider: 'asaas', event, amount: Number(payment.value || cfg.planPrice), status: payment.status || event, externalId: payment.id || '', payload: body, createdAt: agoraISO() });
       }
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { received: true });
     }
 
     const user = requireAuth(req, res, db);
     if (!user) return;
 
+    // Verifica se o usuário já aceitou a versão atual dos termos
+    const versaoAtual = legalTexts().version;
+    const jaAceitouVersaoAtual = db.legalAcceptances.some(a => a.userId === user.id && a.type === 'terms_privacy' && a.version === versaoAtual);
+    const rotasPermitidasSemAceite = ['/api/legal/texts', '/api/legal/accept', '/api/me'];
+    if (!jaAceitouVersaoAtual && !rotasPermitidasSemAceite.includes(pathname)) {
+      return send(res, 409, { ok: false, precisaAceitarTermos: true, version: versaoAtual });
+    }
+
+    if (method === 'POST' && pathname === '/api/legal/accept') {
+      const versao = legalTexts().version;
+      db.legalAcceptances.push({ id: uid('leg'), userId: user.id, type: 'terms_privacy', version: versao, acceptedAt: agoraISO(), ip: req.socket.remoteAddress || '' });
+      auditar(db, user.id, 'legal.accept', { version: versao });
+      await escreverBanco(db);
+      return ok(res, { ok: true });
+    }
+
     if (method === 'GET' && pathname === '/api/me') {
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { user: exposeUser(db, user), company: companyFor(db, user.id), subscription: subscriptionFor(db, user.id), notifications: db.notifications.filter(n => n.userId === user.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,30).map(n => exposeNotification(db, n)), legal: legalTexts() });
     }
 
@@ -381,13 +626,13 @@ async function handleApi(req, res, url) {
       const body = await readBody(req);
       const ids = Array.isArray(body.ids) ? body.ids : [];
       db.notifications.forEach(n => { if (n.userId === user.id && (ids.length === 0 || ids.includes(n.id))) n.read = true; });
-      escreverBanco(db); return ok(res);
+      await escreverBanco(db); return ok(res);
     }
 
     if (method === 'POST' && pathname === '/api/cookies/consent') {
       const body = await readBody(req);
       db.cookieConsents.push({ id: uid('ck'), userId: user.id, necessary: true, analytics: !!body.analytics, marketing: !!body.marketing, version: legalTexts().version, createdAt: agoraISO() });
-      escreverBanco(db); return ok(res);
+      await escreverBanco(db); return ok(res);
     }
 
     if (method === 'PUT' && pathname === '/api/account/profile') {
@@ -402,8 +647,61 @@ async function handleApi(req, res, url) {
       }
       user.updatedAt = agoraISO();
       auditar(db, user.id, 'account.profile.update', {});
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { user: exposeUser(db, user) });
+    }
+
+    if (method === 'POST' && pathname === '/api/conta/2fa/iniciar') {
+      if (user.totpAtivo) return fail(res, 409, 'Autenticacao de dois fatores ja esta ativa.');
+      const segredo = gerarSegredoBase32();
+      user.totpSecret = segredo;
+      user.totpAtivo = false;
+      user.updatedAt = agoraISO();
+      const url = `otpauth://totp/MEI%20no%20Controle:${encodeURIComponent(user.email)}?secret=${segredo}&issuer=MEI%20no%20Controle`;
+      let qrCodeDataUrl = '';
+      try { qrCodeDataUrl = await QRCode.toDataURL(url); } catch (e) { /* qrcode pode falhar sem canvas */ }
+      auditar(db, user.id, 'account.2fa.init', {});
+      await escreverBanco(db);
+      return ok(res, { qrCodeDataUrl, segredoManual: segredo });
+    }
+
+    if (method === 'POST' && pathname === '/api/conta/2fa/confirmar') {
+      const body = await readBody(req);
+      const codigo = textoLimpo(body.codigo, 10);
+      if (!codigo) return fail(res, 400, 'Informe o codigo gerado pelo aplicativo autenticador.');
+      if (!user.totpSecret) return fail(res, 400, 'Inicie a configuracao do 2FA antes de confirmar.');
+      if (user.totpAtivo) return fail(res, 409, 'Autenticacao de dois fatores ja esta ativa.');
+      if (!verificarCodigoTotp(user.totpSecret, codigo)) return fail(res, 400, 'Codigo invalido. Verifique se o aplicativo autenticador esta sincronizado.');
+      user.totpAtivo = true;
+      user.totpCodigosBackup = Array.from({ length: 10 }, () => {
+        const codigoBackup = crypto.randomBytes(5).toString('hex');
+        return gerarHashSenha(codigoBackup);
+      });
+      user.updatedAt = agoraISO();
+      const codigosBackupTexto = user.totpCodigosBackup.map(hash => {
+        // Reconstroi: como salvamos o hash, nao temos o original. Geramos novos codigos.
+        const novoCodigo = crypto.randomBytes(5).toString('hex');
+        return novoCodigo;
+      });
+      // Recria os hashes com os codigos que vamos mostrar
+      user.totpCodigosBackup = codigosBackupTexto.map(c => gerarHashSenha(c));
+      auditar(db, user.id, 'account.2fa.confirm', {});
+      await escreverBanco(db);
+      return ok(res, { codigosBackup: codigosBackupTexto, message: 'Guarde estes codigos de backup em local seguro. Eles nao serao exibidos novamente.' });
+    }
+
+    if (method === 'POST' && pathname === '/api/conta/2fa/desativar') {
+      const body = await readBody(req);
+      const senha = String(body.senha || '');
+      if (!senha) return fail(res, 400, 'Informe sua senha atual para desativar o 2FA.');
+      if (!verificarSenha(senha, user.passwordHash)) return fail(res, 400, 'Senha incorreta.');
+      user.totpSecret = null;
+      user.totpAtivo = false;
+      user.totpCodigosBackup = [];
+      user.updatedAt = agoraISO();
+      auditar(db, user.id, 'account.2fa.disable', {});
+      await escreverBanco(db);
+      return ok(res, { message: 'Autenticacao de dois fatores desativada.' });
     }
 
     if (method === 'POST' && pathname === '/api/billing/start-trial') {
@@ -417,7 +715,7 @@ async function handleApi(req, res, url) {
         sub.status = 'trialing'; sub.trialStartAt = trialStart; sub.trialEndAt = trialEnd; sub.nextBillingAt = trialEnd; sub.checkoutUrl = ''; sub.updatedAt = agoraISO();
         adicionarNotificacao(db, user.id, 'billing', 'Teste grátis iniciado', `Seu teste grátis de ${cfg.trialDays} dias foi ativado.`, `trial-start-${user.id}`);
         auditar(db, user.id, 'billing.trial.mock_start', { subscriptionId: sub.id });
-        escreverBanco(db);
+        await escreverBanco(db);
         return ok(res, { subscription: sub, checkoutUrl: '', message: 'Teste grátis ativado no modo local. Em produção, desative PAYMENT_MOCK e configure o Asaas.' });
       }
       const company = companyFor(db, user.id);
@@ -427,12 +725,12 @@ async function handleApi(req, res, url) {
       });
       sub.status = 'pending_checkout'; sub.provider = 'asaas'; sub.providerCheckoutId = checkout.providerCheckoutId; sub.checkoutUrl = checkout.checkoutUrl; sub.trialStartAt = trialStart; sub.trialEndAt = trialEnd; sub.nextBillingAt = trialEnd; sub.updatedAt = agoraISO();
       auditar(db, user.id, 'billing.checkout.created', { subscriptionId: sub.id, providerCheckoutId: sub.providerCheckoutId });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { subscription: sub, checkoutUrl: checkout.checkoutUrl });
     }
 
     if (method === 'GET' && pathname === '/api/billing/status') {
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { subscription: subscriptionFor(db, user.id), payments: db.payments.filter(p => p.userId === user.id).slice(-12).reverse() });
     }
 
@@ -443,7 +741,7 @@ async function handleApi(req, res, url) {
       sub.status = 'canceled'; sub.canceledAt = agoraISO(); sub.updatedAt = agoraISO();
       adicionarNotificacao(db, user.id, 'billing', 'Assinatura cancelada', 'Seu plano foi cancelado. Seus dados continuam disponíveis para exportação e exclusão conforme a LGPD.', `cancel-${sub.id}`);
       auditar(db, user.id, 'billing.cancel', { subscriptionId: sub.id });
-      escreverBanco(db); return ok(res, { subscription: sub });
+      await escreverBanco(db); return ok(res, { subscription: sub });
     }
 
     if (method === 'POST' && pathname === '/api/account/delete-request') {
@@ -451,12 +749,12 @@ async function handleApi(req, res, url) {
       if (sub && sub.status === 'past_due') return fail(res, 409, 'Não é possível excluir a conta com pagamento pendente. Regularize a cobrança ou fale com o suporte.');
       user.status = 'deleted'; user.deletedAt = agoraISO(); user.email = `deleted-${user.id}@deleted.local`; user.updatedAt = agoraISO();
       auditar(db, user.id, 'account.delete_request', {});
-      escreverBanco(db); return ok(res, { message: 'Conta marcada para exclusão. Dados obrigatórios poderão ser retidos pelo prazo legal.' });
+      await escreverBanco(db); return ok(res, { message: 'Conta marcada para exclusão. Dados obrigatórios poderão ser retidos pelo prazo legal.' });
     }
 
     if (method === 'GET' && pathname === '/api/dashboard') {
       if (!requireActivePlan(user, db, res)) return;
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, dashboardData(db, user.id));
     }
 
@@ -469,9 +767,11 @@ async function handleApi(req, res, url) {
     if (method === 'POST' && pathname === '/api/launches') {
       if (!requireActivePlan(user, db, res)) return;
       const body = await readBody(req);
-      const launch = { id: uid('lan'), userId: user.id, title: textoLimpo(body.title, 150), date: body.date || anoMesDia(new Date()), type: body.type === 'expense' ? 'expense' : 'revenue', category: textoLimpo(body.category, 80) || 'Prestação de Serviço', amount: dinheiro(body.amount), contactName: textoLimpo(body.contactName, 120), invoiceIssued: !!body.invoiceIssued, paymentMethod: textoLimpo(body.paymentMethod, 40) || 'Pix', notes: textoLimpo(body.notes, 1000), createdAt: agoraISO(), updatedAt: agoraISO() };
+      const launch = { id: uid('lan'), userId: user.id, title: textoLimpo(body.title, 150), date: body.date || anoMesDia(new Date()), type: body.type === 'expense' ? 'expense' : 'revenue', category: textoLimpo(body.category, 80) || 'Prestação de Serviço', amount: dinheiro(body.amount), contactName: textoLimpo(body.contactName, 120), invoiceIssued: !!body.invoiceIssued, paymentMethod: textoLimpo(body.paymentMethod, 40) || 'Pix', notes: textoLimpo(body.notes, 1000), cpfsReceita: !!body.cpfsReceita, createdAt: agoraISO(), updatedAt: agoraISO() };
       if (!launch.title || launch.amount <= 0) return fail(res, 400, 'Informe descrição e valor maior que zero.');
-      db.launches.push(launch); auditar(db, user.id, 'launch.create', { launchId: launch.id }); escreverBanco(db); return ok(res, { launch });
+      db.launches.push(launch); auditar(db, user.id, 'launch.create', { launchId: launch.id });
+      if (launch.type === 'revenue') verificarAlertasLimite(db, user.id);
+      await escreverBanco(db); return ok(res, { launch });
     }
 
     const launchDelete = pathname.match(/^\/api\/launches\/([^/]+)$/);
@@ -481,7 +781,7 @@ async function handleApi(req, res, url) {
       const before = db.launches.length;
       db.launches = db.launches.filter(l => !(l.id === id && l.userId === user.id));
       if (db.launches.length === before) return fail(res, 404, 'Lançamento não encontrado.');
-      auditar(db, user.id, 'launch.delete', { launchId: id }); escreverBanco(db); return ok(res);
+      auditar(db, user.id, 'launch.delete', { launchId: id }); await escreverBanco(db); return ok(res);
     }
 
     if (method === 'GET' && pathname === '/api/obligations') {
@@ -497,7 +797,7 @@ async function handleApi(req, res, url) {
       if (!item) return fail(res, 404, 'Obrigação não encontrada.');
       if (['pending','paid','late'].includes(body.status)) item.status = body.status;
       if (body.receiptDataUrl) item.receiptUrl = saveAttachmentFromDataUrl(user.id, body.receiptDataUrl, body.receiptName || 'comprovante')?.url || item.receiptUrl;
-      item.updatedAt = agoraISO(); auditar(db, user.id, 'obligation.update', { obligationId: item.id, status: item.status }); escreverBanco(db); return ok(res, { obligation: item });
+      item.updatedAt = agoraISO(); auditar(db, user.id, 'obligation.update', { obligationId: item.id, status: item.status }); await escreverBanco(db); return ok(res, { obligation: item });
     }
 
     if (method === 'GET' && pathname === '/api/company') {
@@ -515,7 +815,7 @@ async function handleApi(req, res, url) {
       company.dasValue = Number(body.dasValue || company.dasValue || 86.05);
       company.updatedAt = agoraISO();
       db.obligations.filter(o => o.userId === user.id && o.type === 'DAS Mensal' && o.status === 'pending').forEach(o => { o.amount = Number(body.dasValue || company.dasValue); o.updatedAt = agoraISO(); });
-      auditar(db, user.id, 'company.update', { companyId: company.id }); escreverBanco(db); return ok(res, { company: companyFor(db, user.id) });
+      auditar(db, user.id, 'company.update', { companyId: company.id }); await escreverBanco(db); return ok(res, { company: companyFor(db, user.id) });
     }
 
     if (method === 'GET' && pathname === '/api/reports/monthly') {
@@ -526,6 +826,15 @@ async function handleApi(req, res, url) {
       const revenue = dinheiro(rows.filter(l => l.type === 'revenue').reduce((s,l)=>s+Number(l.amount),0));
       const expenses = dinheiro(rows.filter(l => l.type === 'expense').reduce((s,l)=>s+Number(l.amount),0));
       return ok(res, { report: { year, month, monthName: MESES[month-1], revenue, expenses, balance: dinheiro(revenue-expenses), launches: rows } });
+    }
+
+    if (method === 'GET' && pathname === '/api/reports/dasn') {
+      if (!requireActivePlan(user, db, res)) return;
+      const anoAnterior = new Date().getFullYear() - 1;
+      const rows = db.launches.filter(l => l.userId === user.id && new Date(l.date).getFullYear() === anoAnterior);
+      const receitaBruta = dinheiro(rows.filter(l => l.type === 'revenue').reduce((s,l)=>s+Number(l.amount),0));
+      const receitaCpf = dinheiro(rows.filter(l => l.type === 'revenue' && l.cpfsReceita).reduce((s,l)=>s+Number(l.amount),0));
+      return ok(res, { ano: anoAnterior, receitaBruta, receitaCpf, totalLancamentos: rows.length });
     }
 
     if (method === 'GET' && pathname === '/api/tickets') {
@@ -548,7 +857,7 @@ async function handleApi(req, res, url) {
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: user.id, text: description, attachment, system: false, createdAt: agoraISO() });
       notifyTicketTeam(db, ticket, `Novo protocolo ${ticket.protocol}`, `${ticket.title}${priority === 'urgent' ? ' · Urgente' : ''}`, `ticket-new-${ticket.id}`);
       auditar(db, user.id, 'ticket.create', { ticketId: ticket.id, type, protocol: ticket.protocol });
-      escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket), queueInfo: queueInfoFor(db, ticket) });
+      await escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket), queueInfo: queueInfoFor(db, ticket) });
     }
 
     const startMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/start$/);
@@ -561,7 +870,7 @@ async function handleApi(req, res, url) {
       ticket.assigneeId = user.id; ticket.status = 'in_progress'; ticket.updatedAt = agoraISO();
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: user.id, text: `${user.name} iniciou o atendimento.`, attachment: null, system: true, createdAt: agoraISO() });
       if (ticket.customerId) adicionarNotificacao(db, ticket.customerId, 'ticket', `Atendimento iniciado em ${ticket.protocol}`, `${user.name} iniciou o atendimento.`, `ticket-start-${ticket.id}`, ticketTarget(ticket));
-      auditar(db, user.id, 'ticket.start', { ticketId: ticket.id }); escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket) });
+      auditar(db, user.id, 'ticket.start', { ticketId: ticket.id }); await escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket) });
     }
 
     const closeMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/close$/);
@@ -572,7 +881,7 @@ async function handleApi(req, res, url) {
       ticket.status = 'closed'; ticket.closedAt = agoraISO(); ticket.closedBy = user.id; ticket.updatedAt = agoraISO();
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: user.id, text: 'Conversa finalizada. Para continuar, abra um novo protocolo.', attachment: null, system: true, createdAt: agoraISO() });
       if (ticket.customerId && ticket.customerId !== user.id) adicionarNotificacao(db, ticket.customerId, 'ticket', `Protocolo ${ticket.protocol} finalizado`, 'Avalie sua experiência no atendimento.', `ticket-close-${ticket.id}`, ticketTarget(ticket));
-      auditar(db, user.id, 'ticket.close', { ticketId: ticket.id }); escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket) });
+      auditar(db, user.id, 'ticket.close', { ticketId: ticket.id }); await escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket) });
     }
 
     const transferMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/transfer$/);
@@ -599,7 +908,7 @@ async function handleApi(req, res, url) {
       adicionarNotificacao(db, novoAtendente.id, 'ticket', `Atendimento transferido: ${ticket.protocol}`, `${antigoAtendenteNome} transferiu o protocolo ${ticket.protocol} para você.`, `transfer-${ticket.id}-${novoAtendente.id}`, ticketTarget(ticket));
       if (ticket.customerId) adicionarNotificacao(db, ticket.customerId, 'ticket', `Atendimento atualizado em ${ticket.protocol}`, `${novoAtendente.name} assumiu seu atendimento.`, `transfer-customer-${ticket.id}`, ticketTarget(ticket));
       auditar(db, user.id, 'ticket.transfer', { ticketId: ticket.id, fromUserId: user.id, toUserId: novoAtendente.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { ticket: exposeTicket(db, ticket) });
     }
 
@@ -615,7 +924,7 @@ async function handleApi(req, res, url) {
       const ticket = db.tickets.find(t => t.id === messagesMatch[1]);
       if (!ticket || !canAccessTicket(user, ticket)) return fail(res, 404, 'Chamado não encontrado.');
       if (ticket.status === 'closed') return fail(res, 409, 'Este protocolo foi finalizado. Abra um novo chamado para continuar.');
-      if ([CARGOS.SUPPORT, CARGOS.MODERATOR].includes(user.role)) {
+      if ([CARGOS.SUPPORT, CARGOS.MODERATOR, CARGOS.OWNER].includes(user.role)) {
         if (!ticket.assigneeId) return fail(res, 409, 'Inicie o atendimento antes de responder.');
         if (ticket.assigneeId !== user.id && user.role !== CARGOS.OWNER) return fail(res, 409, 'Outro membro da equipe está atendendo este protocolo.');
       }
@@ -631,7 +940,7 @@ async function handleApi(req, res, url) {
       const notifyUserId = user.id === ticket.customerId ? ticket.assigneeId : ticket.customerId;
       if (notifyUserId) adicionarNotificacao(db, notifyUserId, 'ticket', `Nova mensagem no protocolo ${ticket.protocol}`, text || 'Imagem enviada no atendimento.', `msg-${msg.id}`, ticketTarget(ticket));
       if (user.id === ticket.customerId && !ticket.assigneeId) notifyTicketTeam(db, ticket, `Nova mensagem em ${ticket.protocol}`, text || 'Imagem enviada no atendimento.', `ticket-waiting-msg-${msg.id}`);
-      auditar(db, user.id, 'ticket.message', { ticketId: ticket.id }); escreverBanco(db); return ok(res, { message: exposeMessage(db, msg), ticket: exposeTicket(db, ticket) });
+      auditar(db, user.id, 'ticket.message', { ticketId: ticket.id }); await escreverBanco(db); return ok(res, { message: exposeMessage(db, msg), ticket: exposeTicket(db, ticket) });
     }
 
     const feedbackMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/feedback$/);
@@ -650,7 +959,7 @@ async function handleApi(req, res, url) {
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: user.id, text: `Avaliação enviada: ${rating} estrela${rating === 1 ? '' : 's'}.`, attachment: null, system: true, createdAt: agoraISO() });
       if (feedback.assigneeId) adicionarNotificacao(db, feedback.assigneeId, 'feedback', `Nova avaliação em ${ticket.protocol}`, `${rating} estrela${rating === 1 ? '' : 's'}${feedback.comment ? ` · ${feedback.comment}` : ''}`, `feedback-${feedback.id}`, ticketTarget(ticket));
       auditar(db, user.id, 'ticket.feedback.create', { ticketId: ticket.id, feedbackId: feedback.id, rating });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { feedback, ticket: exposeTicket(db, ticket) });
     }
 
@@ -691,7 +1000,7 @@ async function handleApi(req, res, url) {
         .filter(c => canAccessTeamConversation(c, user))
         .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
         .map(c => exposeConversation(db, c, user.id));
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { conversations });
     }
 
@@ -707,7 +1016,7 @@ async function handleApi(req, res, url) {
       db.teamConversations.push(conversation);
       db.teamMessages.push({ id: uid('tmsg'), conversationId: conversation.id, senderId: user.id, text: type === 'group' ? `${user.name} criou o grupo.` : `${user.name} iniciou a conversa.`, attachment: null, system: true, createdAt: agoraISO() });
       auditar(db, user.id, 'team.conversation.create', { conversationId: conversation.id, type });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { conversation: exposeConversation(db, conversation, user.id) });
     }
 
@@ -719,7 +1028,7 @@ async function handleApi(req, res, url) {
       conversation.deletedFor = [...new Set([...(conversation.deletedFor || []), user.id])];
       conversation.updatedAt = agoraISO();
       auditar(db, user.id, 'team.conversation.delete_for_user', { conversationId: conversation.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res);
     }
 
@@ -737,7 +1046,7 @@ async function handleApi(req, res, url) {
       const removedUser = db.users.find(u => u.id === memberId);
       db.teamMessages.push({ id: uid('tmsg'), conversationId: conversation.id, senderId: user.id, text: `${removedUser?.name || 'Membro'} foi removido da conversa.`, attachment: null, system: true, createdAt: agoraISO() });
       auditar(db, user.id, 'team.conversation.member.remove', { conversationId: conversation.id, memberId });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { conversation: exposeConversation(db, conversation, user.id) });
     }
 
@@ -760,7 +1069,7 @@ async function handleApi(req, res, url) {
       if (added.length) db.teamMessages.push({ id: uid('tmsg'), conversationId: conversation.id, senderId: user.id, text: `${added.join(', ')} entrou na conversa.`, attachment: null, system: true, createdAt: agoraISO() });
       conversation.updatedAt = agoraISO();
       auditar(db, user.id, 'team.conversation.member.add', { conversationId: conversation.id, added });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { conversation: exposeConversation(db, conversation, user.id) });
     }
 
@@ -789,7 +1098,7 @@ async function handleApi(req, res, url) {
       conversation.updatedAt = agoraISO();
       normalizeConversationMembers(conversation).filter(m => !m.removedAt && m.userId !== user.id).forEach(m => adicionarNotificacao(db, m.userId, 'team-chat', `Nova mensagem de ${user.name}`, text || 'Imagem enviada no chat da equipe.', `team-msg-${msg.id}-${m.userId}`, { kind: 'team-chat', conversationId: conversation.id }));
       auditar(db, user.id, 'team.message.create', { conversationId: conversation.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { message: exposeMessage(db, msg), conversation: exposeConversation(db, conversation, user.id) });
     }
 
@@ -808,7 +1117,7 @@ async function handleApi(req, res, url) {
       if (!name || !email.includes('@')) return fail(res, 400, 'Informe nome e e-mail válido.');
       if (db.users.some(u => u.email === email)) return fail(res, 409, 'E-mail já cadastrado.');
       const staff = { id: uid('usr'), name, email, role, passwordHash: gerarHashSenha(password), status: 'active', phone: '', cpfCnpj: '', forcePasswordChange: true, avatarUrl: '', createdAt: agoraISO(), updatedAt: agoraISO(), lastLoginAt: null };
-      db.users.push(staff); auditar(db, user.id, 'admin.user.create', { userId: staff.id, role }); escreverBanco(db); return ok(res, { user: exposeUser(db, staff), temporaryPassword: password });
+      db.users.push(staff); auditar(db, user.id, 'admin.user.create', { userId: staff.id, role }); await escreverBanco(db); return ok(res, { user: exposeUser(db, staff), temporaryPassword: password });
     }
 
     const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
@@ -831,7 +1140,7 @@ async function handleApi(req, res, url) {
       if (body.avatarDataUrl) target.avatarUrl = saveAttachmentFromDataUrl(target.id, body.avatarDataUrl, body.avatarName || 'perfil').url;
       target.updatedAt = agoraISO();
       auditar(db, user.id, 'admin.user.update', { userId: target.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { user: exposeUser(db, target) });
     }
 
@@ -846,7 +1155,7 @@ async function handleApi(req, res, url) {
       target.email = `deleted-${target.id}@deleted.local`;
       target.updatedAt = agoraISO();
       auditar(db, user.id, 'admin.user.delete', { userId: target.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { user: exposeUser(db, target) });
     }
 
@@ -876,7 +1185,7 @@ async function handleApi(req, res, url) {
       const staffRoles = [CARGOS.OWNER, CARGOS.SUPPORT, CARGOS.MODERATOR];
       db.users.filter(u => staffRoles.includes(u.role) && u.status === 'active' && u.id !== user.id).forEach(u => adicionarNotificacao(db, u.id, 'flag', `Cliente sinalizado: ${target.name}`, text, `flag-${flag.id}-${u.id}`, { kind: 'admin', userId: target.id }));
       auditar(db, user.id, 'user.flag.create', { userId: target.id, flagId: flag.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { flag: { ...flag, createdBy: exposeUser(db, user) } });
     }
     if (adminFlagMatch && method === 'DELETE') {
@@ -888,7 +1197,7 @@ async function handleApi(req, res, url) {
       if (idx < 0) return fail(res, 404, 'Sinalização não encontrada.');
       db.flaggedUsers.splice(idx, 1);
       auditar(db, user.id, 'user.flag.delete', { flagId });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res);
     }
 
@@ -906,7 +1215,7 @@ async function handleApi(req, res, url) {
       const kind = targetKindMap[type] || 'info';
       const n = adicionarNotificacao(db, targetUserId, kind, title, msg, `admin-ntf-${targetUserId}-${Date.now()}`, { kind, ticketType: type === 'moderação' ? 'report' : null });
       auditar(db, user.id, 'admin.notification.send', { targetUserId, type, title });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { notification: n });
     }
 
@@ -924,7 +1233,7 @@ async function handleApi(req, res, url) {
       const tpl = { id: uid('tpl'), createdBy: user.id, title, text, createdAt: agoraISO() };
       db.templates.push(tpl);
       auditar(db, user.id, 'template.create', { templateId: tpl.id });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res, { template: { ...tpl, titulo: tpl.title, texto: tpl.text } });
     }
     const templateDelete = pathname.match(/^\/api\/templates\/([^/]+)$/);
@@ -934,7 +1243,7 @@ async function handleApi(req, res, url) {
       if (idx < 0) return fail(res, 404, 'Modelo não encontrado.');
       db.templates.splice(idx, 1);
       auditar(db, user.id, 'template.delete', { templateId: templateDelete[1] });
-      escreverBanco(db);
+      await escreverBanco(db);
       return ok(res);
     }
 
@@ -964,7 +1273,13 @@ async function handleApi(req, res, url) {
 
 function legalTexts() {
   return {
-    version: '2026-06-25',
+    version: '2026-06-26',
+    controlador: {
+      nome: 'PREENCHER: razão social ou nome do responsável',
+      cnpjOuCpf: 'PREENCHER',
+      contato: 'privacidade@meinocontrole.com.br',
+      encarregadoLgpd: 'PREENCHER: nome ou e-mail do encarregado (DPO)',
+    },
     termsTitle: 'Termos de Uso — MEI no Controle',
     privacyTitle: 'Política de Privacidade — MEI no Controle',
     cookieTitle: 'Política de Cookies — MEI no Controle',
@@ -972,13 +1287,19 @@ function legalTexts() {
       'O MEI no Controle é uma ferramenta de organização financeira e fiscal para microempreendedores individuais. O serviço ajuda a registrar receitas, despesas, vencimentos e alertas, mas não substitui contador, advogado ou orientação oficial do Portal do Empreendedor.',
       'O usuário é responsável pela veracidade dos dados cadastrados, pelos lançamentos inseridos e pela conferência de obrigações fiscais antes de qualquer envio oficial.',
       'A assinatura pode ser cancelada pelo usuário dentro da plataforma. Havendo cobrança pendente, a conta poderá ficar em modo restrito até a regularização.',
-      'Protocolos de suporte e moderação são registrados para segurança, histórico de atendimento e prevenção de uso indevido.'
+      'Protocolos de suporte e moderação são registrados para segurança, histórico de atendimento e prevenção de uso indevido.',
+      'Este serviço é destinado a maiores de 18 anos com CNPJ MEI ativo ou em processo de abertura.',
+      'O uso indevido da plataforma para fraude, abuso ou violação de direitos de terceiros pode resultar em suspensão ou exclusão da conta, sem prejuízo de outras medidas legais.',
     ],
     privacy: [
       'Tratamos dados como nome, e-mail, telefone, CNPJ/CPF informado, dados do MEI, lançamentos financeiros, obrigações, mensagens de suporte, anexos enviados e registros de aceite legal.',
       'Dados de cartão não são armazenados pelo sistema. O pagamento é realizado por gateway integrado; este projeto salva apenas identificadores técnicos da cobrança, quando disponíveis.',
       'O usuário pode solicitar acesso, correção, exportação ou exclusão da conta. Alguns registros poderão ser mantidos quando necessário para cumprimento legal, prevenção a fraude, defesa de direitos ou histórico financeiro obrigatório.',
-      'Anexos enviados no chat devem conter apenas informações necessárias para o atendimento.'
+      'Anexos enviados no chat devem conter apenas informações necessárias para o atendimento.',
+      'Base legal do tratamento: execução de contrato (Art. 7º, V, LGPD) para os dados necessários ao funcionamento do serviço, e consentimento (Art. 7º, I) para cookies não essenciais.',
+      'Os dados são mantidos enquanto a conta estiver ativa e, após o encerramento, pelo prazo necessário para cumprimento de obrigação legal ou defesa em processo administrativo/judicial, conforme Art. 16 da LGPD.',
+      'O titular dos dados pode exercer os direitos do Art. 18 da LGPD (confirmação, acesso, correção, anonimização, portabilidade, eliminação, informação sobre compartilhamento, revogação do consentimento) pelo contato informado acima.',
+      'Em caso de incidente de segurança que possa acarretar risco relevante, o titular e a Autoridade Nacional de Proteção de Dados (ANPD) serão comunicados conforme exigido pela LGPD.',
     ],
     cookies: [
       'Cookies necessários mantêm login, segurança e funcionamento da plataforma.',
@@ -1025,11 +1346,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  lerBanco();
-  server.listen(cfg.port, () => {
-    console.log(`MEI no Controle online em ${cfg.appUrl}`);
-    console.log(`Gateway: ${cfg.paymentMock ? 'modo local/mock' : 'Asaas real'} | Dados: ${cfg.dataFile}`);
-  });
+  (async () => {
+    await lerBanco();
+    server.listen(cfg.port, cfg.host, () => {
+      console.log(`MEI no Controle online em ${cfg.appUrl}`);
+      console.log(`Rede: http://192.168.1.4:${cfg.port} (acesso WiFi)`);
+      console.log(`Gateway: ${cfg.paymentMock ? 'modo local/mock' : 'Asaas real'} | Banco: PostgreSQL`);
+    });
+  })();
 }
 
 module.exports = { server, legalTexts };

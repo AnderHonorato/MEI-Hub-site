@@ -34,12 +34,42 @@ Sistema full-stack para controle de faturamento, DAS, obrigações fiscais, assi
 ## Requisitos
 
 - Node.js 18.18 ou superior.
-- Nenhuma dependência externa obrigatória para rodar localmente.
+- PostgreSQL (local, Docker ou [Neon](https://neon.tech) serverless gratuito).
+- Dependencias gerenciadas via npm.
 
 ## Como rodar localmente
 
+### 1. Configurar o banco de dados
+
+**Opcao A — Neon (recomendado, sem instalacao):**
+
+1. Crie uma conta gratuita em https://console.neon.tech
+2. Crie um projeto e copie a **connection string**
+3. Cole no `.env` como `DATABASE_URL`
+
+**Opcao B — Docker:**
+
+```bash
+docker compose up -d
+```
+
+**Opcao C — Instalacao local:**
+
+Instale o PostgreSQL 16+ e crie o banco `mei_no_controle`.
+
+### 2. Configurar e rodar
+
 ```bash
 cp .env.example .env
+# Edite .env e ajuste DATABASE_URL com sua connection string
+
+# Rode a migration inicial
+npx prisma migrate dev --name inicial
+
+# Se tiver dados antigos no JSON, migre-os:
+npm run migrate-json
+
+# Inicie o servidor
 npm start
 ```
 
@@ -84,6 +114,10 @@ O sistema usa checkout/link seguro do gateway. O cliente informa o cartão no am
 ## Testes
 
 ```bash
+# Certifique-se de que o PostgreSQL está rodando e que a migration foi aplicada:
+npx prisma migrate dev --name inicial
+
+# Execute os testes
 npm test
 ```
 
@@ -109,24 +143,64 @@ public/
   style.css
   app.js
 src/
-  server.js
-  db.js
-  auth.js
+  servidor.js
+  banco.js
+  autenticacao.js
   asaas.js
-  config.js
-  utils.js
-  seed.js
+  configuracao.js
+  utilidades.js
+  semente.js
+  prisma.js
+  migrarJsonParaPostgres.js
+prisma/
+  schema.prisma
+  migrations/
 tests/
   api.test.js
-data/
-  database.json gerado automaticamente
 uploads/
   imagens enviadas por clientes/equipe
 ```
 
 ## Banco de dados
 
-Esta versão usa arquivo JSON persistente para facilitar instalação em VPS simples. Para produção com muitos usuários, migre a camada `src/db.js` para PostgreSQL ou MySQL mantendo os mesmos modelos lógicos.
+O projeto usa **PostgreSQL** via **Prisma ORM**. O schema define 17 modelos mapeados para as coleções originais do JSON.
+
+### Migração de dados antigos
+
+Se você tem um arquivo `data/database.json` com dados, execute:
+
+```bash
+npm run migrate-json
+```
+
+Isso insere todos os registros do JSON no PostgreSQL.
+
+### Variaveis de ambiente do banco
+
+| Chave | Padrao | Uso |
+|-------|--------|-----|
+| `DATABASE_URL` | `postgresql://usuario:senha@localhost:5432/mei_no_controle?schema=public` | Conexao PostgreSQL (local, Docker ou Neon) |
+
+## Configuracao de e-mail (SMTP)
+
+Para habilitar verificacao de e-mail e recuperacao de senha, configure as variaveis SMTP:
+
+| Chave | Padrao | Uso |
+|-------|--------|-----|
+| `SMTP_HOST` | `smtp.seudominio.com.br` | Servidor SMTP |
+| `SMTP_PORT` | `587` | Porta SMTP |
+| `SMTP_USER` | `naoresponda@seudominio.com.br` | Usuario SMTP |
+| `SMTP_PASS` | (vazio) | Senha SMTP |
+| `SMTP_FROM` | `"MEI no Controle <naoresponda@...>"` | Remetente |
+
+Se `SMTP_PASS` estiver vazio, os e-mails sao logados no console (modo dev) e o e-mail e verificado automaticamente no cadastro.
+
+## Funcionalidades de seguranca
+
+- **Verificacao de e-mail**: codigo de 6 digitos enviado no cadastro
+- **Limite de tentativas**: 5 erros de senha bloqueiam a conta por 15 minutos
+- **Recuperacao de senha**: fluxo com codigo enviado por e-mail
+- **Autenticacao de dois fatores (2FA)**: compatível com Google Authenticator (TOTP RFC 6238), com QR code e 10 codigos de backup
 
 ## Publicação em servidor
 
@@ -137,6 +211,9 @@ git clone seu-repositorio
 cd mei-no-controle-real
 cp .env.example .env
 nano .env
+# Configure DATABASE_URL, JWT_SECRET e demais variáveis
+npm install
+npx prisma migrate deploy
 npm start
 ```
 

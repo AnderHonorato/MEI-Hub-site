@@ -3,6 +3,12 @@ async function api(caminho, opcoes={}) {
   if (estado.token) cabecalhos.Authorization = `Bearer ${estado.token}`;
   const resposta = await fetch(caminho, {...opcoes, headers: cabecalhos});
   const dados = await resposta.json().catch(()=>({ok:false,message:'Resposta inválida do servidor.'}));
+  if (dados.precisaAceitarTermos) {
+    estado.precisaAceitarTermos = true
+    estado.versaoTermos = dados.version
+    renderizarApp()
+    throw new Error('Você precisa aceitar os novos Termos de Uso e Política de Privacidade para continuar.')
+  }
   if (!resposta.ok || dados.ok === false) throw new Error(dados.message || 'Falha na requisição.');
   return dados;
 }

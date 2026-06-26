@@ -21,8 +21,10 @@ loadDotEnv();
 const root = process.cwd();
 const config = {
   port: Number(process.env.PORT || 3000),
+  host: process.env.HOST || '0.0.0.0',
   appUrl: process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`,
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-before-production-123456789',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://usuario:senha@localhost:5432/mei_no_controle?schema=public',
   dataFile: path.resolve(root, process.env.DATA_FILE || './data/database.json'),
   uploadDir: path.resolve(root, process.env.UPLOAD_DIR || './uploads'),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 5),
@@ -33,6 +35,11 @@ const config = {
   planPrice: Number(process.env.PLAN_PRICE || 24.90),
   planName: process.env.PLAN_NAME || 'Plano Pro MEI no Controle',
   trialDays: Number(process.env.TRIAL_DAYS || 7),
+  smtpHost: process.env.SMTP_HOST || 'smtp.seudominio.com.br',
+  smtpPort: Number(process.env.SMTP_PORT || 587),
+  smtpUser: process.env.SMTP_USER || 'naoresponda@seudominio.com.br',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpFrom: process.env.SMTP_FROM || '"MEI no Controle" <naoresponda@seudominio.com.br>',
 };
 
 module.exports = config;

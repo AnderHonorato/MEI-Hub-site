@@ -35,6 +35,7 @@ function mudarAba(aba){ estado.aba=aba; localStorage.setItem('mei_aba',aba); ren
 function normalizarAba(){ const itens=itensNavegacao(); if(itens.some(([id])=>id===estado.aba)) return; estado.aba=itens[0]?.[0]||'dashboard'; localStorage.setItem('mei_aba', estado.aba); }
 
 function renderizarInicio(){
+  document.body.classList.toggle('modal-aberto', !!estado.modal)
   document.querySelector('#app').innerHTML = paginaInicial() + (estado.modal?modalAutenticacao():'');
   vincularInicio();
 }
@@ -43,38 +44,59 @@ function paginaInicial(){
 return `<div class="inicio">
   <header class="barra-superior"><div class="barra-superior-interna">${logotipo()}<div class="acoes-superiores"><button class="btn fantasma" data-abrir="login">Entrar</button><button class="btn primary" data-abrir="registro">Começar teste grátis</button></div></div></header>
   <main>
-    <section class="heroi"><div><span class="sobrancelha">${icone('escudo')} Plataforma brasileira para MEI</span><h1>Controle seu MEI sem planilha confusa.</h1><p>Registre faturamento, acompanhe o limite anual, organize o DAS, prepare sua DASN-SIMEI e fale com suporte por protocolo sempre que precisar.</p><div class="heroi-acoes"><button class="btn primary" data-abrir="registro">Começar teste grátis por 7 dias</button><button class="btn" data-abrir="login">Já tenho conta</button></div><div class="linha-confianca"><div class="confianca"><strong>R$ 81 mil</strong><span>limite anual de referência</span></div><div class="confianca"><strong>DAS</strong><span>alertas de vencimento mensal</span></div><div class="confianca"><strong>LGPD</strong><span>privacidade, aceite e exclusão</span></div></div></div><div class="cartao-produto"><div class="mini-navegador"><div class="navegador-topo"><span class="ponto"></span><span class="ponto"></span><span class="ponto"></span></div><div class="navegador-corpo"><div class="cartao-limite"><small>FATURAMENTO ACUMULADO</small><h3>R$ 46.280,00</h3><div class="barra-progresso"><span></span></div><p>57% do limite anual utilizado</p></div><div class="grade-painel"><div class="mini-estatistica"><i>${icone('carteira')}</i><b>R$ 8.750</b><span>Receita do mês</span></div><div class="mini-estatistica"><i>${icone('calendario')}</i><b>3 dias</b><span>Próximo DAS</span></div><div class="mini-estatistica"><i>${icone('chat')}</i><b>SUP-00018</b><span>Protocolo aberto</span></div><div class="mini-estatistica"><i>${icone('escudo')}</i><b>Seguro</b><span>Dados com controle</span></div></div></div></div></div></section>
+    <section class="heroi"><div><span class="sobrancelha">${icone('escudo')} Plataforma brasileira para MEI</span><h1>Controle seu MEI sem planilha confusa.</h1>  <p>Registre faturamento, acompanhe o limite anual, organize o DAS, prepare sua DASN-SIMEI e fale com suporte por protocolo sempre que precisar.</p><div class="heroi-acoes"><button class="btn primary" data-abrir="registro" style="font-size:15px;padding:12px 24px">Começar teste grátis por 7 dias</button><button class="btn fantasma" data-abrir="login">Já tenho conta</button></div><div class="linha-confianca"><div class="confianca"><strong>R$ 81 mil</strong><span>limite anual de referência</span></div><div class="confianca"><strong>DAS</strong><span>alertas de vencimento mensal</span></div><div class="confianca"><strong>LGPD</strong><span>privacidade, aceite e exclusão</span></div></div></div><div class="cartao-produto"><div class="mini-navegador"><div class="navegador-topo"><span class="ponto"></span><span class="ponto"></span><span class="ponto"></span></div><div class="navegador-corpo"><div class="cartao-limite"><small>FATURAMENTO ACUMULADO</small><h3>R$ 46.280,00</h3><div class="barra-progresso"><span></span></div><p>57% do limite anual utilizado</p></div><div class="grade-painel"><div class="mini-estatistica"><i>${icone('carteira')}</i><b>R$ 8.750</b><span>Receita do mês</span></div><div class="mini-estatistica"><i>${icone('calendario')}</i><b>3 dias</b><span>Próximo DAS</span></div><div class="mini-estatistica"><i>${icone('chat')}</i><b>SUP-00018</b><span>Protocolo aberto</span></div><div class="mini-estatistica"><i>${icone('escudo')}</i><b>Seguro</b><span>Dados com controle</span></div></div></div></div></div></section>
     <section class="secao"><div class="secao-titulo"><div><h2>Um sistema simples para rotina real de MEI</h2><p class="texto-guia">Feito para quem vende, presta serviço, emite DAS e precisa enxergar o negócio sem depender de planilha quebrada.</p></div></div><div class="cartoes">${recurso('grafico','Limite do MEI','Veja faturamento acumulado, percentual usado e quanto ainda falta para o limite anual.')}${recurso('recibo','DAS e DASN-SIMEI','Calendário fiscal com vencimentos, comprovantes e status de pagamento.')}${recurso('chat','Suporte com protocolo','Abra chamados, envie imagens e acompanhe atendimento até finalizar.')}${recurso('bandeira','Moderação e denúncias','Canal separado para reportar uso indevido, má fé ou problemas de segurança.')}${recurso('cartao','Assinatura mensal','Teste grátis com checkout de cartão via gateway e avisos de cobrança.')}${recurso('escudo','LGPD desde o início','Termos, privacidade, cookies, exportação e solicitação de exclusão de conta.')}</div></section>
+    ${secaoDepoimentos()}
     <section class="secao"><div class="precos"><div><h2>Plano Pro MEI</h2><p>Comece com 7 dias de teste. Após o período gratuito, a assinatura mensal mantém seu painel, relatórios, suporte e histórico seguro.</p><div class="mini-acoes"><span class="marcador ok">Sem planilha</span><span class="marcador ok">Suporte por protocolo</span><span class="marcador ok">Dados salvos</span></div></div><div class="caixa-preco"><div class="preco">R$ 24,90 <small>/mês</small></div><p>Cancelamento pela plataforma, respeitando cobranças pendentes e regras de retenção legal.</p><button class="btn primary bloco" data-abrir="registro">Criar minha conta</button></div></div></section>
   </main>
 </div>${barraCookie()}`;
 }
 
 function recurso(ic,titulo,txt){return `<article class="recurso"><div class="recurso-icone">${icone(ic)}</div><h3>${titulo}</h3><p>${txt}</p></article>`}
+function secaoDepoimentos(){
+  return `<section class="secao"><div class="secao-titulo"><div><h2>Quem já usa recomenda</h2></div></div>
+    <div class="grade colunas-3">
+      ${depoimento('Funcionário do meu, MEI Serviços','Parei de perder prazo de DAS. O alerta me avisa antes.')}
+      ${depoimento('Vendedora, MEI Comércio','Finalmente entendo quanto falta pro limite anual sem fazer conta de cabeça.')}
+      ${depoimento('Prestador de serviço, MEI','O suporte responde rápido e organizado, com protocolo.')}
+    </div>
+  </section>`
+}
+function depoimento(autor, texto){
+  return `<div class="painel"><p style="font-size:13px;color:var(--tinta)">"${escaparHtml(texto)}"</p><strong style="font-size:11px;color:var(--opaco)">${escaparHtml(autor)}</strong></div>`
+}
 
 function vincularInicio(){
   $$('[data-abrir]').forEach(b=>b.onclick=()=>{estado.modal=b.dataset.abrir; estado.modoAutenticacao=b.dataset.abrir; renderizarInicio();});
-  document.querySelector('.fechar')?.addEventListener('click',()=>{estado.modal=null;renderizarInicio();});
+  document.querySelector('.fechar')?.addEventListener('click',()=>{estado.modal=null; renderizarInicio();});
   document.querySelector('#formularioLogin')?.addEventListener('submit',enviarLogin);
   document.querySelector('#formularioRegistro')?.addEventListener('submit',enviarRegistro);
+  document.querySelector('#linkEsqueciSenha')?.addEventListener('click',(e)=>{e.preventDefault(); estado.modoAutenticacao='esqueci-senha'; renderizarInicio();});
+  document.querySelector('#formularioEsqueciSenha')?.addEventListener('submit',enviarEsqueciSenha);
+  document.querySelector('#formularioRedefinirSenha')?.addEventListener('submit',enviarRedefinirSenha);
+  document.querySelector('#formulario2fa')?.addEventListener('submit',validar2faLogin);
   vincularCookie();
+  iniciarRevelarAoRolar()
 }
 
 function modalAutenticacao(){
   if(!estado.modal) return '';
-  return `<div class="modal-superposicao"><div class="modal"><div class="modal-cabecalho"><div><h2>${estado.modoAutenticacao==='login'?'Entrar na conta':'Criar conta MEI'}</h2><p class="texto-guia">${estado.modoAutenticacao==='login'?'Acesse seu painel e protocolos.':'Comece seu teste grátis com dados reais do seu negócio.'}</p></div><button class="fechar">×</button></div>${estado.modoAutenticacao==='login'?formularioLogin():formularioRegistro()}</div></div>`;
+  if(estado.modoAutenticacao==='esqueci-senha'||estado.modoAutenticacao==='redefinir-senha') return modalEsqueciSenha();
+  if(estado.modoAutenticacao==='2fa') return modal2faLogin();
+  return `<div class="modal-superposicao"><div class="modal"><div class="modal-cabecalho"><div><h2>${estado.modoAutenticacao==='login'?'Entrar na conta':'Criar conta MEI'}</h2><p class="texto-guia">${estado.modoAutenticacao==='login'?'Acesse seu painel e protocolos.':'Comece seu teste gratis com dados reais do seu negocio.'}</p></div><button class="fechar">&times;</button></div>${estado.modoAutenticacao==='login'?formularioLogin():formularioRegistro()}</div></div>`;
 }
-function formularioLogin(){return `<form id="formularioLogin" class="formulario"><div class="campo"><label>E-mail</label><input name="email" type="email" required></div><div class="campo"><label>Senha</label><input name="password" type="password" required></div><button class="btn primary bloco">Entrar</button><p class="check">Acessos iniciais: owner@meinocontrole.local, suporte@meinocontrole.local, moderacao@meinocontrole.local</p></form>`}
+function formularioLogin(){return `<form id="formularioLogin" class="formulario"><div class="campo"><label>E-mail</label><input name="email" type="email" required></div><div class="campo"><label>Senha</label><input name="password" type="password" required></div><button class="btn primary bloco">Entrar</button><p class="check"><a href="#" id="linkEsqueciSenha">Esqueci minha senha</a></p></form>`}
 function formularioRegistro(){return `<form id="formularioRegistro" class="formulario"><div class="linha"><div class="campo"><label>Nome do responsável</label><input name="name" required></div><div class="campo"><label>E-mail</label><input name="email" type="email" required></div></div><div class="linha"><div class="campo"><label>Senha</label><input name="password" type="password" minlength="8" required></div><div class="campo"><label>Telefone</label><input name="phone"></div></div><div class="linha"><div class="campo"><label>Nome do negócio</label><input name="businessName" required></div><div class="campo"><label>CNPJ MEI</label><input name="cnpj" inputmode="numeric"></div></div><div class="campo"><label>Tipo de atividade</label><select name="activityType"><option>Serviços</option><option>Comércio</option><option>Comércio + Serviços</option><option>Caminhoneiro</option></select></div><label class="check"><input type="checkbox" name="acceptTerms" required> Aceito os Termos de Uso e a Política de Privacidade.</label><button class="btn primary bloco">Criar conta e ir para assinatura</button></form>`}
 
-async function enviarLogin(e){e.preventDefault(); const fd=new FormData(e.target); try{const dados=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(fd))}); estado.token=dados.token; localStorage.setItem('mei_token',dados.token); Object.assign(estado,{usuario:dados.user,empresa:dados.company,assinatura:dados.subscription,modal:null}); toast('Login realizado.'); iniciarVerificacaoNotificacoes(); renderizarApp(); carregarDadosAba();}catch(err){toast(err.message,'error')}}
-async function enviarRegistro(e){e.preventDefault(); const fd=new FormData(e.target); const corpo=Object.fromEntries(fd); corpo.acceptTerms=fd.get('acceptTerms')==='on'; try{const dados=await api('/api/auth/register',{method:'POST',body:JSON.stringify(corpo)}); estado.token=dados.token; localStorage.setItem('mei_token',dados.token); Object.assign(estado,{usuario:dados.user,empresa:dados.company,assinatura:dados.subscription,modal:null,aba:'assinatura'}); toast('Conta criada.'); iniciarVerificacaoNotificacoes(); renderizarApp(); carregarDadosAba();}catch(err){toast(err.message,'error')}}
+async function enviarLogin(e){e.preventDefault(); const fd=new FormData(e.target); try{const dados=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(fd))}); if(dados.pendente2fa){ estado.tokenTemporario=dados.tokenTemporario; estado.modoAutenticacao='2fa'; estado.modal='2fa'; renderizarInicio(); return } estado.token=dados.token; localStorage.setItem('mei_token',dados.token); Object.assign(estado,{usuario:dados.user,empresa:dados.company,assinatura:dados.subscription,modal:null}); toast('Login realizado.'); iniciarVerificacaoNotificacoes(); renderizarApp(); carregarDadosAba();}catch(err){toast(err.message,'error')}}
+async function enviarRegistro(e){e.preventDefault(); const fd=new FormData(e.target); const corpo=Object.fromEntries(fd); corpo.acceptTerms=fd.get('acceptTerms')==='on'; try{const dados=await api('/api/auth/register',{method:'POST',body:JSON.stringify(corpo)}); if(dados.precisaVerificarEmail){ estado.modal=null; toast('Um codigo de verificacao foi enviado para seu e-mail. Verifique sua caixa de entrada.'); renderizarInicio(); return } estado.token=dados.token; localStorage.setItem('mei_token',dados.token); Object.assign(estado,{usuario:dados.user,empresa:dados.company,assinatura:dados.subscription,modal:null,aba:'conta'}); toast('Conta criada.'); iniciarVerificacaoNotificacoes(); renderizarApp(); carregarDadosAba();}catch(err){toast(err.message,'error')}}
 
 function renderizarApp(){
   if(!estado.usuario) return renderizarInicio();
   normalizarAba();
+  document.body.classList.toggle('modal-aberto', !!(estado.modal || estado.chamadoAtual || estado.usuarioDetalhe || estado.midiaModal || estado.chatEquipeAberto))
   const recolhida = estado.barraRecolhida;
-  document.querySelector('#app').innerHTML = `<div class="concha ${recolhida?'barra-recolhida':''}"><aside class="barra-lateral${recolhida?' recolhida':''}" id="barraLateral">${logotipo()}${resumoPerfil()}<nav class="navegacao">${itensNavegacao().map(([id,ic,rotulo])=>`<button class="${estado.aba===id?'ativo':''}" data-aba="${id}">${icone(ic)} <span class="rotulo-icone-navegacao">${rotulo}</span></button>`).join('')}</nav><div class="barra-lateral-rodape">${ehEquipe()?`<button class="btn bloco" id="btnChatEquipe">${icone('chat')} <span class="rotulo-icone-navegacao">Chat equipe</span></button>`:''}<button class="btn bloco" id="btnAtualizar">${icone('grafico')} <span class="rotulo-icone-navegacao">Atualizar</span></button><button class="btn perigo bloco" id="btnSair">${icone('saida')} <span class="rotulo-icone-navegacao">Sair</span></button></div></aside><main class="principal"><header class="principal-topo"><div style="display:flex;align-items:center;gap:10px"><button class="btn" id="btnMenu" style="display:none">${icone('menu')}</button><button class="btn" id="btnAlternarBarra">${icone('seta')}</button><div><h1>${tituloAba()}</h1><p>${subtituloAba()}</p></div></div><div class="mini-acoes">${estado.assinatura?marcadorStatus(estado.assinatura.status):''}<button class="btn" id="btnNotificacoes">${icone('sino')} ${naoPagos()?`<span class="ponto-contador">${naoPagos()}</span>`:''}</button>${ehEquipe()?`<button class="btn" id="btnChatEquipeTopo">${icone('chat')} Equipe</button>`:''}<button class="btn primary" id="btnAcaoRapida">${rotuloRapido()}</button></div>${painelNotificacoes()}</header><section class="conteudo" id="conteudo">${renderizarAba()}</section></main></div>${modalChamado()}${modalMidia()}${modalPerfilDetalhe()}${modalEditarUsuario()}${modalNotificar()}${modalChatEquipe()}${ehEquipe()?`<button class="flutuante-chat" id="btnFlutuante" title="Conversas">${icone('chat')}</button>${modalFlutuante()}`:''}${barraCookie()}`;
+  document.querySelector('#app').innerHTML = `<div class="concha ${recolhida?'barra-recolhida':''}"><aside class="barra-lateral${recolhida?' recolhida':''}" id="barraLateral">${logotipo()}${resumoPerfil()}<nav class="navegacao">${itensNavegacao().map(([id,ic,rotulo])=>`<button class="${estado.aba===id?'ativo':''}" data-aba="${id}">${icone(ic)} <span class="rotulo-icone-navegacao">${rotulo}</span></button>`).join('')}</nav><div class="barra-lateral-rodape">${ehEquipe()?`<button class="btn bloco" id="btnChatEquipe">${icone('chat')} <span class="rotulo-icone-navegacao">Chat equipe</span></button>`:''}<button class="btn bloco" id="btnAtualizar">${icone('grafico')} <span class="rotulo-icone-navegacao">Atualizar</span></button><button class="btn perigo bloco" id="btnSair">${icone('saida')} <span class="rotulo-icone-navegacao">Sair</span></button></div></aside><main class="principal"><header class="principal-topo"><div style="display:flex;align-items:center;gap:10px"><button class="btn" id="btnMenu" style="display:none">${icone('menu')}</button><button class="btn" id="btnAlternarBarra">${icone('seta')}</button><div><h1>${tituloAba()}</h1><p>${subtituloAba()}</p></div></div><div class="mini-acoes">${estado.assinatura?marcadorStatus(estado.assinatura.status):''}<button class="btn" id="btnNotificacoes">${icone('sino')} ${naoPagos()?`<span class="ponto-contador">${naoPagos()}</span>`:''}</button>${ehEquipe()?`<button class="btn" id="btnChatEquipeTopo">${icone('chat')} Equipe</button>`:''}<button class="btn primary" id="btnAcaoRapida">${rotuloRapido()}</button></div>${painelNotificacoes()}</header><section class="conteudo" id="conteudo">${renderizarAba()}</section></main></div>${modalChamado()}${modalMidia()}${modalPerfilDetalhe()}${modalEditarUsuario()}${modalNotificar()}${modalChatEquipe()}${ehEquipe()?`<button class="flutuante-chat" id="btnFlutuante" title="Conversas">${icone('chat')}</button>${modalFlutuante()}`:''}${barraCookie()}${modalReaceiteTermos()}`;
   vincularConcha(); vincularAba(); vincularCookie();
 }
 
@@ -105,7 +127,7 @@ function vincularConcha(){
   document.querySelector('#btnFlutuanteModeracao')?.addEventListener('click',()=>{estado.flutuanteAberto=false;mudarAba(ehEquipe()?'moderacao':'denuncia');});
   document.querySelector('#btnFlutuanteComum')?.addEventListener('click',()=>{estado.flutuanteAberto=false;abrirChatEquipe();});
   document.querySelector('#btnFecharPerfilDetalhe')?.addEventListener('click',()=>{estado.usuarioDetalhe=null;renderizarApp();});
-  document.querySelector('#btnAcaoRapida')?.addEventListener('click',()=>{ if(estado.aba==='lancamentos') document.querySelector('#tituloLancamento')?.focus(); else if(ehCliente()&&!planoOk()) mudarAba('assinatura'); else if(ehCliente()) mudarAba('lancamentos'); else mudarAba(estado.usuario.cargo==='moderator'?'moderacao':'suporte'); });
+  document.querySelector('#btnAcaoRapida')?.addEventListener('click',()=>{ if(estado.aba==='lancamentos') document.querySelector('#tituloLancamento')?.focus(); else if(ehCliente()&&!planoOk()) mudarAba('conta'); else if(ehCliente()) mudarAba('lancamentos'); else mudarAba(estado.usuario.cargo==='moderator'?'moderacao':'suporte'); });
 }
 
 async function abrirDetalheUsuario(usuarioId){
@@ -135,7 +157,7 @@ async function abrirNotificacao(notificacao){
   }
   if(alvo.kind==='team-chat' && alvo.conversationId && ehEquipe()){ await abrirChatEquipe(); await abrirConversaEquipe(alvo.conversationId); return; }
   if(alvo.kind==='admin' && alvo.userId && ehEquipe()){ mudarAba('admin'); await carregarDadosAba(); setTimeout(()=>abrirDetalheUsuario(alvo.userId),200); return; }
-  if(alvo.kind==='billing'){ mudarAba('assinatura'); return; }
+  if(alvo.kind==='billing'){ mudarAba('conta'); return; }
   if(notificacao.tipo==='team-chat' && ehEquipe()){ await abrirChatEquipe(); return; }
   if(notificacao.tipo==='sinalizacao' && ehEquipe()){ mudarAba('admin'); return; }
   if(['ticket','feedback'].includes(notificacao.tipo)){ mudarAba(ehEquipe() ? (estado.usuario.cargo==='moderator'?'moderacao':'suporte') : 'suporte'); return; }
@@ -143,8 +165,8 @@ async function abrirNotificacao(notificacao){
 }
 
 function renderizarAba(){
-  if(ehCliente() && !planoOk() && !['assinatura','suporte','denuncia','conta'].includes(estado.aba)) return visaoBloqueio();
-  return ({dashboard:visaoDashboard, lancamentos:visaoLancamentos, obrigacoes:visaoObrigacoes, relatorios:visaoRelatorios, suporte:visaoSuporte, denuncia:visaoDenuncia, moderacao:visaoModeracao, assinatura:visaoAssinatura, conta:visaoConta, admin:visaoAdmin}[estado.aba] || visaoDashboard)();
+  if(ehCliente() && !planoOk() && !['suporte','denuncia','conta'].includes(estado.aba)) return visaoBloqueio();
+  return ({dashboard:visaoDashboard, lancamentos:visaoLancamentos, obrigacoes:visaoObrigacoes, relatorios:visaoRelatorios, suporte:visaoSuporte, denuncia:visaoDenuncia, moderacao:visaoModeracao, conta:visaoConta, admin:visaoAdmin}[estado.aba] || visaoDashboard)();
 }
 
 function vincularAba(){
@@ -155,6 +177,7 @@ function vincularAba(){
   $$('[data-ob-paga]').forEach(b=>b.onclick=()=>marcarObrigacaoPaga(b.dataset.obPaga));
   $$('[data-ob-anexo]').forEach(b=>b.onchange=function(){anexarComprovante(this)});
   document.querySelector('#formularioRelatorio')?.addEventListener('submit',gerarRelatorio);
+  document.querySelector('#btnGerarDasn')?.addEventListener('click',gerarDasn);
   document.querySelector('#formularioChamado')?.addEventListener('submit',criarChamado);
   document.querySelector('#filtroChamado')?.addEventListener('change',e=>{estado.filtroChamados=e.target.value;localStorage.setItem('mei_filtro_chamados',estado.filtroChamados);renderizarApp();});
   if(document.querySelector('#filtroChamado')) document.querySelector('#filtroChamado').value=estado.filtroChamados;
@@ -169,7 +192,11 @@ function vincularAba(){
   $$('[data-midia-url]').forEach(b=>b.onclick=()=>{estado.midiaModal={url:b.dataset.midiaUrl,nome:b.dataset.midiaNome,mime:b.dataset.midiaMime};renderizarApp();});
   document.querySelector('#btnFecharMidia')?.addEventListener('click',()=>{estado.midiaModal=null;renderizarApp();});
   document.querySelector('#formularioPerfil')?.addEventListener('submit',salvarPerfil);
+  const formPerfil = document.getElementById('formularioPerfil')
+  if(formPerfil) ativarTravaDeEdicao(formPerfil)
   document.querySelector('#formularioEmpresa')?.addEventListener('submit',salvarEmpresa);
+  const formEmpresa = document.getElementById('formularioEmpresa')
+  if(formEmpresa) ativarTravaDeEdicao(formEmpresa)
   document.querySelector('#btnExcluirConta')?.addEventListener('click',excluirConta);
   document.querySelector('#btnRedefinirCookie')?.addEventListener('click',()=>{localStorage.removeItem('mei_cookie_ok');renderizarApp();});
   document.querySelector('#formularioEquipe')?.addEventListener('submit',criarEquipe);
@@ -188,6 +215,42 @@ function vincularAba(){
   document.querySelector('#formularioEnviarNotificacao')?.addEventListener('submit',enviarNotificacaoAdmin);
   document.querySelector('#formularioModelo')?.addEventListener('submit',criarModelo);
   $$('[data-excluir-modelo]').forEach(b=>b.onclick=()=>excluirModelo(b.dataset.excluirModelo));
+  document.querySelector('#btnIniciar2fa')?.addEventListener('click',iniciar2fa);
+  document.querySelector('#formularioConfirmar2fa')?.addEventListener('submit',confirmar2fa);
+  document.querySelector('#formularioDesativar2fa')?.addEventListener('submit',desativar2fa);
+  document.querySelector('#btnAceitarRevisaoTermos')?.addEventListener('click',aceitarRevisaoTermos);
+  document.querySelector('#caixaTermosRevisao')?.addEventListener('scroll', verificarScrollTermosRevisao);
+  if(document.getElementById('caixaTermosRevisao')) verificarScrollTermosRevisao();
+}
+
+function modalReaceiteTermos(){
+  if(!estado.precisaAceitarTermos) return ''
+  return `<div class="modal-superposicao"><div class="modal largo"><div class="modal-cabecalho"><div><h2>Termos de Uso atualizados</h2><p class="texto-guia">Nossos termos foram atualizados. Para continuar usando o Meiraiz, role ate o fim do texto e aceite.</p></div></div>
+    <div id="caixaTermosRevisao" style="max-height:280px;overflow-y:auto;border:1px solid var(--linha);border-radius:12px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--opaco)">
+      <p>${estado.legal?.terms?.map(t=>`<p>${escaparHtml(t)}</p>`).join('')||'Carregando...'}</p>
+      <p><strong>Política de Privacidade:</strong></p>
+      ${estado.legal?.privacy?.map(t=>`<p>${escaparHtml(t)}</p>`).join('')||''}
+    </div>
+    <label class="check"><input type="checkbox" id="checkAceiteRevisaoTermos" disabled> Li e aceito os Termos de Uso e a Política de Privacidade.</label>
+    <div style="margin-top:10px"><button class="btn primary bloco" id="btnAceitarRevisaoTermos" disabled>Aceitar e continuar</button></div>
+  </div></div>`
+}
+
+function verificarScrollTermosRevisao(){
+  const caixa = document.getElementById('caixaTermosRevisao')
+  const check = document.getElementById('checkAceiteRevisaoTermos')
+  const btn = document.getElementById('btnAceitarRevisaoTermos')
+  if(!caixa || !check) return
+  if(caixa.scrollHeight <= caixa.clientHeight) { check.disabled = false; if(btn) btn.disabled = false }
+  else {
+    const chegouAoFim = caixa.scrollTop + caixa.clientHeight >= caixa.scrollHeight - 4
+    if(chegouAoFim) { check.disabled = false; if(btn) btn.disabled = false }
+  }
+  check.onchange = () => { if(btn) btn.disabled = !check.checked }
+}
+
+async function aceitarRevisaoTermos(){
+  try{ await api('/api/legal/accept', {method:'POST',body:'{}'}); estado.precisaAceitarTermos=false; renderizarApp(); toast('Termos aceitos. Obrigado!'); }catch(err){toast(err.message,'error')}
 }
 
 function vincularChamadoDinamico(){
@@ -235,6 +298,7 @@ async function excluirLancamento(id){ mostrarConfirmacao('Excluir','Excluir este
 async function marcarObrigacaoPaga(id){ try{await api(`/api/obligations/${id}`,{method:'PATCH',body:JSON.stringify({status:'paid'})}); toast('Obrigação marcada como paga.'); await carregarDadosAba();}catch(err){toast(err.message,'error')} }
 async function anexarComprovante(input){ const id=input.dataset.obAnexo; const anexo=await arquivoParaDataUrl(input); if(!anexo) return; try{await api(`/api/obligations/${id}`,{method:'PATCH',body:JSON.stringify({status:'paid',receiptDataUrl:anexo.dataUrl,receiptName:anexo.nome})}); toast('Comprovante anexado e marcado como pago.'); await carregarDadosAba();}catch(err){toast(err.message,'error')} }
 async function gerarRelatorio(e){ e.preventDefault(); const fd=new FormData(e.target); try{const dados=await api(`/api/reports/monthly?year=${fd.get('year')}&month=${fd.get('month')}`); const r=dados.report; document.querySelector('#resultadoRelatorio').innerHTML=`<h2>${escaparHtml(r.monthName)} de ${r.year}</h2><div class="grade"><div class="linha-kpi"><span>Receita</span><strong>${dinheiroValor(r.revenue)}</strong></div><div class="linha-kpi"><span>Despesa</span><strong>${dinheiroValor(r.expenses)}</strong></div><div class="linha-kpi"><span>Saldo</span><strong>${dinheiroValor(r.balance)}</strong></div></div><h3>Lançamentos</h3>${tabelaLancamentos(r.launches,true)}<button class="btn" onclick="window.print()">Imprimir / salvar PDF</button>`;}catch(err){toast(err.message,'error')} }
+async function gerarDasn(){ try{const dados=await api('/api/reports/dasn'); const d=dados; document.querySelector('#resultadoDasn').innerHTML=`<div class="painel plano"><h3>Resumo DASN-SIMEI ${d.ano}</h3><div class="linha-kpi"><span>Receita bruta total (CNPJ)</span><strong>${dinheiroValor(d.receitaBruta)}</strong></div><div class="linha-kpi"><span>Receitas via CPF (mesma atividade)</span><strong>${dinheiroValor(d.receitaCpf)}</strong></div><div class="linha-kpi"><span>Total de lançamentos</span><strong>${d.totalLancamentos}</strong></div><p class="texto-guia" style="margin-top:12px">Copie a receita bruta acima e informe no Portal do Simples Nacional ao preencher a DASN-SIMEI. Entregue até 31 de maio de ${new Date().getFullYear()}.</p><button class="btn" onclick="window.print()">Imprimir</button></div>` }catch(err){toast(err.message,'error')} }
 async function criarChamado(e){ e.preventDefault(); const fd=new FormData(e.target); const corpo=Object.fromEntries(fd); corpo.type=e.target.dataset.tipo; const anexo=await arquivoParaDataUrl(e.target.attachment); if(anexo){corpo.attachmentDataUrl=anexo.dataUrl;corpo.attachmentName=anexo.nome;} try{const dados=await api('/api/tickets',{method:'POST',body:JSON.stringify(corpo)}); toast(`Protocolo ${dados.ticket.protocol} aberto.`); e.target.reset(); await carregarDadosAba();}catch(err){toast(err.message,'error')} }
 
 function pararChamado(){ if(temporizadorChamado){clearInterval(temporizadorChamado);temporizadorChamado=null;} }
@@ -357,4 +421,71 @@ function vincularCookie(){
 async function salvarCookie(analytics,marketing){ localStorage.setItem('mei_cookie_ok','true'); if(estado.token){ try{await api('/api/cookies/consent',{method:'POST',body:JSON.stringify({analytics,marketing})});}catch{} } renderizarApp(); }
 
 window.mudarAba = mudarAba;
+
+function modalEsqueciSenha(){
+  return `<div class="modal-superposicao"><div class="modal"><div class="modal-cabecalho"><div><h2>${estado.modoAutenticacao==='redefinir-senha'?'Redefinir senha':'Esqueci minha senha'}</h2><p class="texto-guia">${estado.modoAutenticacao==='redefinir-senha'?'Digite o codigo recebido e sua nova senha.':'Informe seu e-mail para receber um codigo de recuperacao.'}</p></div><button class="fechar">&times;</button></div>${estado.modoAutenticacao==='redefinir-senha'?formularioRedefinirSenha():formularioEsqueciSenha()}</div></div>`
+}
+function formularioEsqueciSenha(){ return `<form id="formularioEsqueciSenha" class="formulario"><div class="campo"><label>E-mail</label><input name="email" type="email" required></div><button class="btn primary bloco">Enviar codigo</button><p><a href="#" onclick="event.preventDefault(); estado.modoAutenticacao='login'; renderizarInicio();">Voltar para login</a></p></form>` }
+function formularioRedefinirSenha(){ return `<form id="formularioRedefinirSenha" class="formulario"><div class="campo"><label>E-mail</label><input name="email" type="email" required></div><div class="campo"><label>Codigo de recuperacao</label><input name="codigo" required></div><div class="campo"><label>Nova senha</label><input name="novaSenha" type="password" minlength="8" required></div><button class="btn primary bloco">Redefinir senha</button><p><a href="#" onclick="event.preventDefault(); estado.modoAutenticacao='login'; renderizarInicio();">Voltar para login</a></p></form>` }
+
+function modal2faLogin(){
+  return `<div class="modal-superposicao"><div class="modal"><div class="modal-cabecalho"><div><h2>Autenticacao de dois fatores</h2><p class="texto-guia">Digite o codigo do seu aplicativo autenticador.</p></div><button class="fechar">&times;</button></div><form id="formulario2fa" class="formulario"><div class="campo"><label>Codigo 2FA</label><input name="codigo" required autocomplete="one-time-code" inputmode="numeric" maxlength="6"></div><button class="btn primary bloco">Verificar</button></form></div></div>`
+}
+
+async function enviarEsqueciSenha(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{
+    await api('/api/auth/esqueci-senha',{method:'POST',body:JSON.stringify(Object.fromEntries(fd))});
+    toast('Se o e-mail existir, um codigo foi enviado.');
+    estado.modoAutenticacao='redefinir-senha'; estado.emailRecuperacao=fd.get('email'); renderizarInicio();
+  }catch(err){toast(err.message,'error')}
+}
+async function enviarRedefinirSenha(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{
+    await api('/api/auth/redefinir-senha',{method:'POST',body:JSON.stringify(Object.fromEntries(fd))});
+    toast('Senha redefinida. Faca login.'); estado.modoAutenticacao='login'; estado.modal='login'; renderizarInicio();
+  }catch(err){toast(err.message,'error')}
+}
+async function validar2faLogin(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{
+    const dados=await api('/api/auth/2fa/validar',{method:'POST',body:JSON.stringify({tokenTemporario:estado.tokenTemporario,codigo:fd.get('codigo')})});
+    estado.token=dados.token; localStorage.setItem('mei_token',dados.token); estado.tokenTemporario=null;
+    Object.assign(estado,{usuario:dados.user,empresa:dados.company,assinatura:dados.subscription,modal:null});
+    toast('Login realizado.'); iniciarVerificacaoNotificacoes(); renderizarApp(); carregarDadosAba();
+  }catch(err){toast(err.message,'error')}
+}
+
+async function iniciar2fa(){
+  try{
+    const dados=await api('/api/conta/2fa/iniciar',{method:'POST'});
+    estado.qrCode2fa=dados.qrCodeDataUrl; estado.segredoManual2fa=dados.segredoManual; renderizarApp();
+  }catch(err){toast(err.message,'error')}
+}
+async function confirmar2fa(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{
+    const dados=await api('/api/conta/2fa/confirmar',{method:'POST',body:JSON.stringify({codigo:fd.get('codigo')})});
+    estado.qrCode2fa=null; estado.segredoManual2fa=null; estado.codigosBackup2fa=dados.codigosBackup;
+    estado.usuario.totpAtivo=true; toast('2FA ativado!'); renderizarApp();
+  }catch(err){toast(err.message,'error')}
+}
+async function desativar2fa(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{
+    await api('/api/conta/2fa/desativar',{method:'POST',body:JSON.stringify({senha:fd.get('senha')})});
+    estado.usuario.totpAtivo=false; toast('2FA desativado.'); renderizarApp();
+  }catch(err){toast(err.message,'error')}
+}
+
+document.addEventListener('click', (e) => {
+  const botaoFormatar = e.target.closest('[data-formatar]')
+  if(botaoFormatar){
+    e.preventDefault()
+    const alvo = document.getElementById('textoMensagem') || document.querySelector('#formularioMensagemEquipe textarea')
+    if(alvo) aplicarFormatacaoTexto(alvo, botaoFormatar.dataset.formatar)
+  }
+})
+
 iniciar().then(()=>{ if(estado.token) carregarDadosAba(); });

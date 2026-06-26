@@ -3,8 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MEI no Controle: sistema para controlar faturamento, DAS, obrigações e suporte com assinatura mensal.">
-  <title>MEI no Controle — Faturamento, DAS e Obrigações</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <meta name="description" content="Meiraiz: sistema para controlar faturamento, DAS e obrigações do seu MEI.">
+  <title>Meiraiz — Faturamento, DAS e Obrigações</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#176f4d">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Meiraiz">
   <link rel="stylesheet" href="/css/estilo.css">
 </head>
 <body>
@@ -16,6 +24,9 @@
   <script src="/js/api.js"></script>
   <script src="/js/componentes.js"></script>
   <script src="/js/paginas.js"></script>
+  <script src="/js/instalarApp.js"></script>
+  <script src="/js/revelarAoRolar.js"></script>
   <script src="/js/app.js"></script>
+  <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}</script>
 </body>
 </html>

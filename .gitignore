@@ -6,3 +6,5 @@ uploads/*
 .DS_Store
 *.zip
 *.log
+
+/src/generated/prisma
