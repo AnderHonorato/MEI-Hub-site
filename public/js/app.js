@@ -192,6 +192,7 @@ function vincularChamadoDinamico(){
   if(document.querySelector('#formularioMensagem')) document.querySelector('#formularioMensagem').onsubmit=enviarMensagem;
   if(document.querySelector('#btnFecharChamado')) document.querySelector('#btnFecharChamado').onclick=()=>fecharChamado(estado.chamadoAtual.id);
   if(document.querySelector('#transferirAtendimento')) document.querySelector('#transferirAtendimento').onchange=function(){if(this.value) transferirAtendimento(this.value)};
+  if(document.querySelector('#formularioAvaliacao')) document.querySelector('#formularioAvaliacao').onsubmit=enviarAvaliacao;
   $$('[data-midia-url]', document.querySelector('.chat-modal') || document).forEach(b=>b.onclick=()=>{estado.midiaModal={url:b.dataset.midiaUrl,nome:b.dataset.midiaNome,mime:b.dataset.midiaMime};renderizarApp();});
   $$('[data-usuario-detalhe]', document.querySelector('.chat-modal') || document).forEach(b=>b.onclick=()=>abrirDetalheUsuario(b.dataset.usuarioDetalhe));
 }
@@ -268,6 +269,11 @@ async function enviarMensagem(e){
   if(anexo){corpo.attachmentDataUrl=anexo.dataUrl;corpo.attachmentName=anexo.nome;}
   try{await api(`/api/tickets/${estado.chamadoAtual.id}/messages`,{method:'POST',body:JSON.stringify(corpo)}); e.target.reset(); await atualizarChamadoAtual();}catch(err){toast(err.message,'error')}
 }
+async function enviarAvaliacao(e){
+  e.preventDefault(); const fd=new FormData(e.target);
+  try{await api(`/api/tickets/${estado.chamadoAtual.id}/feedback`,{method:'POST',body:JSON.stringify({rating:Number(fd.get('rating')),comment:fd.get('comment')||''})}); toast('Avaliação enviada. Obrigado!'); await atualizarChamadoAtual();}catch(err){toast(err.message,'error')}
+}
+
 async function salvarPerfil(e){ e.preventDefault(); const fd=new FormData(e.target); const corpo={name:fd.get('name'),phone:fd.get('phone')}; const avatarArquivo=await arquivoParaDataUrl(e.target.elements.avatar); if(avatarArquivo){corpo.avatarDataUrl=avatarArquivo.dataUrl;corpo.avatarName=avatarArquivo.nome;} try{const dados=await api('/api/account/profile',{method:'PUT',body:JSON.stringify(corpo)}); estado.usuario=dados.user; toast('Perfil atualizado.'); renderizarApp();}catch(err){toast(err.message,'error')} }
 async function salvarEmpresa(e){ e.preventDefault(); const corpo=Object.fromEntries(new FormData(e.target)); try{const dados=await api('/api/company',{method:'PUT',body:JSON.stringify(corpo)}); estado.empresa=dados.company; toast('Dados salvos.'); renderizarApp();}catch(err){toast(err.message,'error')} }
 async function excluirConta(){ mostrarConfirmacao('Solicitar exclusão','Deseja solicitar a exclusão da sua conta?',async()=>{try{await api('/api/account/delete-request',{method:'POST',body:'{}'}); toast('Solicitação registrada.'); executarSaida();}catch(err){toast(err.message,'error')}}) }

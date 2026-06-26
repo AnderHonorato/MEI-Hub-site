@@ -505,7 +505,7 @@ async function handleApi(req, res, url) {
     }
     if (method === 'PUT' && pathname === '/api/company') {
       const body = await readBody(req);
-      let company = companyFor(db, user.id);
+      let company = db.companies.find(c => c.userId === user.id);
       if (!company) { company = criarEmpresaPadrao(user, body); db.companies.push(company); }
       company.businessName = textoLimpo(body.businessName, 160) || company.businessName;
       company.tradeName = textoLimpo(body.tradeName, 160) || company.tradeName;
@@ -515,7 +515,7 @@ async function handleApi(req, res, url) {
       company.dasValue = Number(body.dasValue || company.dasValue || 86.05);
       company.updatedAt = agoraISO();
       db.obligations.filter(o => o.userId === user.id && o.type === 'DAS Mensal' && o.status === 'pending').forEach(o => { o.amount = Number(body.dasValue || company.dasValue); o.updatedAt = agoraISO(); });
-      auditar(db, user.id, 'company.update', { companyId: company.id }); escreverBanco(db); return ok(res, { company });
+      auditar(db, user.id, 'company.update', { companyId: company.id }); escreverBanco(db); return ok(res, { company: companyFor(db, user.id) });
     }
 
     if (method === 'GET' && pathname === '/api/reports/monthly') {
