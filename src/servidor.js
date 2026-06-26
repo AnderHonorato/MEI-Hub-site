@@ -83,8 +83,8 @@ function saveAttachmentFromDataUrl(userId, dataUrl, originalName = 'imagem') {
   return { url: `/uploads/${userId}/${filename}`, mime, name: originalName, size: buffer.length };
 }
 
-function companyFor(db, userId) { return db.companies.find(c => c.userId === userId) || null; }
-function subscriptionFor(db, userId) { return atualizarStatusAssinatura(db, userId) || null; }
+function companyFor(db, userId) { const c = db.companies.find(c => c.userId === userId) || null; if (!c) return null; return { ...c, nomeNegocio: c.businessName, nomeFantasia: c.tradeName, tipoAtividade: c.activityType, limiteAnual: c.annualLimit, valorDas: c.dasValue, criadoEm: c.createdAt }; }
+function subscriptionFor(db, userId) { const s = atualizarStatusAssinatura(db, userId); if (!s) return null; return { ...s, nomePlano: s.planName, preco: s.price, fimTesteEm: s.trialEndAt, inicioTesteEm: s.trialStartAt, proximaCobrancaEm: s.nextBillingAt, urlCheckout: s.checkoutUrl }; }
 const EQUIPE = [CARGOS.OWNER, CARGOS.SUPPORT, CARGOS.MODERATOR];
 const BADGES = { owner: 'Fundador', support: 'Suporte', moderator: 'Moderador', customer: 'Cliente' };
 
@@ -102,10 +102,25 @@ function exposeUser(db, user) {
   const safe = usuarioPublico(user);
   if (!safe) return null;
   const stats = feedbackForAssignee(db, user.id);
-  return { ...safe, ...stats, badgeLabel: BADGES[user.role] || safe.roleLabel || user.role, initials: initials(user.name), avatarUrl: user.avatarUrl || '' };
+  const s = db.flaggedUsers.filter(f => f.userId === user.id);
+  return {
+    ...safe, ...stats,
+    nome: safe.name, cargo: safe.role, email: safe.email, telefone: safe.phone, cpfCnpj: safe.cpfCnpj,
+    criadoEm: safe.createdAt, ultimoLoginEm: safe.lastLoginAt, atualizadoEm: safe.updatedAt,
+    rotuloCargo: safe.roleLabel, forcarTrocaSenha: safe.forcePasswordChange,
+    mediaAvaliacao: stats.ratingAvg, quantidadeAvaliacoes: stats.ratingCount,
+    marcadorRotulo: BADGES[user.role] || safe.roleLabel || user.role,
+    iniciais: initials(user.name), avatarUrl: user.avatarUrl || '',
+    sinalizado: s.length > 0
+  };
 }
 function exposeMessage(db, message) {
-  return { ...message, sender: exposeUser(db, db.users.find(u => u.id === message.senderId)) };
+  return {
+    ...message,
+    texto: message.text, remetente: exposeUser(db, db.users.find(u => u.id === message.senderId)),
+    anexo: message.attachment, criadoEm: message.createdAt, sistema: message.system,
+    sender: exposeUser(db, db.users.find(u => u.id === message.senderId))
+  };
 }
 function ticketStatusRank(status) {
   return ({ open: 0, in_progress: 1, closed: 2 }[status] ?? 3);
@@ -123,9 +138,12 @@ function exposeTicket(db, ticket) {
   const feedback = db.ticketFeedbacks.find(f => f.ticketId === ticket.id) || null;
   return {
     ...ticket,
-    customer: exposeUser(db, db.users.find(u => u.id === ticket.customerId)),
-    assignee: exposeUser(db, db.users.find(u => u.id === ticket.assigneeId)),
-    closedByUser: exposeUser(db, db.users.find(u => u.id === ticket.closedBy)),
+    titulo: ticket.title, categoria: ticket.category, protocolo: ticket.protocol,
+    tipo: ticket.type, prioridade: ticket.priority, status: ticket.status,
+    criadoEm: ticket.createdAt, atualizadoEm: ticket.updatedAt,
+    cliente: exposeUser(db, db.users.find(u => u.id === ticket.customerId)),
+    atendente: exposeUser(db, db.users.find(u => u.id === ticket.assigneeId)),
+    fechadoPor: exposeUser(db, db.users.find(u => u.id === ticket.closedBy)),
     feedback
   };
 }
@@ -144,11 +162,12 @@ function queueInfoFor(db, ticket) {
   const waitedMinutes = Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / 60000);
   const delayed = waitedMinutes > estimatedMinutes;
   return {
-    usersAhead,
-    estimatedMinutes,
-    waitedMinutes,
-    delayed,
+    usersAhead, estimatedMinutes, waitedMinutes, delayed,
+    usuariosNaFrente: usersAhead, minutosEstimados: estimatedMinutes, minutosAguardados: waitedMinutes, atrasado: delayed,
     message: delayed
+      ? 'Desculpe a demora, estou dando prioridade para sua solicitação.'
+      : `Tempo para ser atendido em ${estimatedMinutes} minutos, usuários na fila ${usersAhead}.`,
+    mensagem: delayed
       ? 'Desculpe a demora, estou dando prioridade para sua solicitação.'
       : `Tempo para ser atendido em ${estimatedMinutes} minutos, usuários na fila ${usersAhead}.`
   };
@@ -184,7 +203,12 @@ function notificationTargetFor(db, notification) {
   return null;
 }
 function exposeNotification(db, notification) {
-  return { ...notification, target: notificationTargetFor(db, notification) };
+  return {
+    ...notification,
+    titulo: notification.title, corpo: notification.body, lida: notification.read,
+    tipo: notification.type, criadoEm: notification.createdAt,
+    target: notificationTargetFor(db, notification)
+  };
 }
 function notifyTicketTeam(db, ticket, title, body, key) {
   const allowed = ticket.type === 'report' ? [CARGOS.OWNER, CARGOS.MODERATOR] : [CARGOS.OWNER, CARGOS.SUPPORT];
@@ -216,8 +240,11 @@ function exposeConversation(db, conversation, viewerId) {
   const lastMessage = visibleMessages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
   return {
     ...conversation,
+    titulo: conversation.title, tipo: conversation.type,
     memberIds: conversation.members.filter(m => !m.removedAt).map(m => m.userId),
+    membros: conversation.members.filter(m => !m.removedAt).map(m => exposeUser(db, db.users.find(u => u.id === m.userId))),
     members: conversation.members.filter(m => !m.removedAt).map(m => exposeUser(db, db.users.find(u => u.id === m.userId))),
+    ultimaMensagem: lastMessage ? exposeMessage(db, lastMessage) : null,
     lastMessage: lastMessage ? exposeMessage(db, lastMessage) : null
   };
 }
@@ -630,14 +657,21 @@ async function handleApi(req, res, url) {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .map(f => {
           const ticket = db.tickets.find(t => t.id === f.ticketId);
-          return { ...f, ticket: exposeTicket(db, ticket), customer: exposeUser(db, db.users.find(u => u.id === f.customerId)), assignee: exposeUser(db, db.users.find(u => u.id === f.assigneeId)) };
+          return {
+            ...f, nota: f.rating, comentario: f.comment, chamadoId: f.ticketId,
+            ticket: exposeTicket(db, ticket),
+            cliente: exposeUser(db, db.users.find(u => u.id === f.customerId)),
+            atendente: exposeUser(db, db.users.find(u => u.id === f.assigneeId)),
+            customer: exposeUser(db, db.users.find(u => u.id === f.customerId)),
+            assignee: exposeUser(db, db.users.find(u => u.id === f.assigneeId))
+          };
         });
       const allowedTypes = user.role === CARGOS.OWNER ? ['support', 'report'] : user.role === CARGOS.SUPPORT ? ['support'] : ['report'];
       const staff = db.users.filter(u => EQUIPE.includes(u.role) && u.status === 'active');
       const ranking = staff.map(member => {
         const rows = db.ticketFeedbacks.filter(f => f.assigneeId === member.id && allowedTypes.includes(db.tickets.find(t => t.id === f.ticketId)?.type));
         const avg = rows.length ? rows.reduce((sum, f) => sum + Number(f.rating || 0), 0) / rows.length : 0;
-        return { user: exposeUser(db, member), ratingAvg: Number(avg.toFixed(1)), ratingCount: rows.length };
+        return { usuario: exposeUser(db, member), mediaAvaliacao: Number(avg.toFixed(1)), quantidadeAvaliacoes: rows.length, user: exposeUser(db, member), ratingAvg: Number(avg.toFixed(1)), ratingCount: rows.length };
       }).filter(row => row.ratingCount > 0).sort((a, b) => b.ratingAvg - a.ratingAvg || b.ratingCount - a.ratingCount);
       return ok(res, { feedbacks, ranking });
     }
@@ -880,7 +914,11 @@ async function handleApi(req, res, url) {
           activeSubscriptions: db.subscriptions.filter(s => ['trialing','active'].includes(s.status)).length,
           pendingTickets: db.tickets.filter(t => t.status !== 'closed' && t.type === 'support').length,
           pendingReports: db.tickets.filter(t => t.status !== 'closed' && t.type === 'report').length,
-          revenueRegistered: dinheiro(db.launches.filter(l => l.type === 'revenue').reduce((s,l)=>s+Number(l.amount),0))
+          revenueRegistered: dinheiro(db.launches.filter(l => l.type === 'revenue').reduce((s,l)=>s+Number(l.amount),0)),
+          clientes: db.users.filter(u => u.role === CARGOS.CUSTOMER && u.status === 'active').length,
+          assinaturasAtivas: db.subscriptions.filter(s => ['trialing','active'].includes(s.status)).length,
+          chamadosPendentes: db.tickets.filter(t => t.status !== 'closed' && t.type === 'support').length,
+          denunciasPendentes: db.tickets.filter(t => t.status !== 'closed' && t.type === 'report').length
         }
       });
     }

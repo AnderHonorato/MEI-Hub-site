@@ -136,5 +136,8 @@ function modalChamado(){
 }
 
 function visaoBloqueio(){
-  return ''
+  if(estado.assinatura?.status==='past_due'){
+    return `<div class="bloqueio"><div><h2>Pagamento pendente</h2><p>Seu plano está com pagamento em atraso. Regularize a assinatura para liberar todos os recursos do painel.</p></div><div><button class="btn primary bloco" onclick="mudarAba('assinatura')">Ver assinatura</button><button class="btn bloco" onclick="mudarAba('suporte')">Falar com suporte</button></div></div>`
+  }
+  return `<div class="bloqueio"><div><h2>Finalize o checkout para liberar o painel</h2><p>Seu cadastro está pronto. Para iniciar o teste grátis de 7 dias, valide o método de pagamento pelo checkout seguro.</p><div class="mini-acoes"><span class="marcador ok">7 dias grátis</span><span class="marcador ok">Dados salvos</span><span class="marcador ok">Cancelamento pela conta</span></div></div><div><button class="btn primary bloco" id="btnIniciarTeste">Iniciar teste com checkout</button><button class="btn bloco" onclick="mudarAba('suporte')">Falar com suporte</button></div></div>`
 }

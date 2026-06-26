@@ -144,9 +144,6 @@ async function abrirNotificacao(notificacao){
 
 function renderizarAba(){
   if(ehCliente() && !planoOk() && !['assinatura','suporte','denuncia','conta'].includes(estado.aba)) return visaoBloqueio();
-  if(estado.assinatura?.status==='past_due' && !ehEquipe() && !['assinatura','suporte','denuncia','conta'].includes(estado.aba)){
-    return `<div class="bloqueio"><div><h2>Pagamento pendente</h2><p>Seu plano está com pagamento em atraso. Regularize a assinatura para liberar todos os recursos do painel.</p></div><div><button class="btn primary bloco" onclick="mudarAba('assinatura')">Ver assinatura</button><button class="btn bloco" onclick="mudarAba('suporte')">Falar com suporte</button></div></div>`;
-  }
   return ({dashboard:visaoDashboard, lancamentos:visaoLancamentos, obrigacoes:visaoObrigacoes, relatorios:visaoRelatorios, suporte:visaoSuporte, denuncia:visaoDenuncia, moderacao:visaoModeracao, assinatura:visaoAssinatura, conta:visaoConta, admin:visaoAdmin}[estado.aba] || visaoDashboard)();
 }
 
