@@ -271,7 +271,7 @@ function dashboardData(db, userId) {
   const obligations = db.obligations.filter(o => o.userId === userId).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   const pendingObligations = obligations.filter(o => o.status !== 'paid').slice(0, 8);
   return {
-    empresa: company, ano: year, meses: months, atual: current, obrigacoes: pendingObligations, lancamentos: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12),
+    empresa: company, ano: year, meses: months, atual: current, obrigacoes: pendingObligations, lancamentos: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12).map(l => ({ ...l, data: l.date, titulo: l.title, tipo: l.type, categoria: l.category, valor: l.amount })),
     company, year, months, current, launches: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12), obligations: pendingObligations
   };
 }

@@ -21,7 +21,7 @@ function listaObrigacoes(linhas=[]){
 function filaChamadosFiltrado(tipo){
   let linhas=(estado.chamados||[]).filter(t=>t.tipo===tipo)
   if(estado.filtroChamados==='urgent') linhas=linhas.filter(t=>t.prioridade==='urgent')
-  else if(estado.filtroChamados!=='all') linhas=linhas.filter(t=>t.status===estado.filtroChamados)
+  else if(estado.filtroChamados!=='all' && estado.filtroChamados!=='todos') linhas=linhas.filter(t=>t.status===estado.filtroChamados)
   return linhas
 }
 
