@@ -4,6 +4,14 @@ function escaparHtml(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&
 function dataHoraFormatada(v){ return v ? new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}) : '—'; }
 function naoPagos(){ return (estado.notificacoes||[]).filter(n=>!n.lida).length; }
 function iconeNotificacao(n){ if(n?.tipo==='cobranca') return 'cartao'; if(n?.tipo==='sinalizacao') return 'bandeira'; return n?.tipo==='equipe'?'chat':'sino'; }
+function iconeCargo(usuario){
+  if(usuario?.cargo==='customer') return ''
+  const mapa = {owner:{ic:'escudo',titulo:'Fundador'},support:{ic:'chat',titulo:'Suporte'},moderator:{ic:'bandeira',titulo:'Moderador'}}
+  const c = mapa[usuario?.cargo]
+  if(!c) return ''
+  return `<span class="icone-cargo" title="${c.titulo}">${icone(c.ic,'icone icone-cargo-svg')}</span>`
+}
+
 function tipoMarcador(usuario){ return usuario?.marcadorRotulo || ({owner:'Fundador',support:'Suporte',moderator:'Moderador',customer:'Cliente'}[usuario?.cargo]||'Usuário'); }
 function avatar(usuario, classe='avatar'){ return usuario?.avatarUrl ? `<img class="${classe}" src="${usuario.avatarUrl}" alt="Foto de ${escaparHtml(usuario.nome||'usuário')}">` : `<span class="${classe}">${escaparHtml(usuario?.iniciais || String(usuario?.nome||'U').slice(0,1).toUpperCase())}</span>`; }
 function estrelas(valor=0){ const v=Number(valor||0); return `<span class="estrelas">${[1,2,3,4,5].map(i=>`<span class="${i<=Math.round(v)?'acesa':''}">★</span>`).join('')}</span>`; }

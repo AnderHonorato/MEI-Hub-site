@@ -120,7 +120,7 @@ function bolhaMensagem(m){
   if(m.sistema) return `<div class="msg sistema"><strong>Sistema</strong><div>${m.texto||''}</div><small>${dataHoraFormatada(m.criadoEm)}</small></div>`
   const remetente=m.remetente||{}
   const souEu=remetente.id===estado.usuario.id
-  return `<div class="msg-linha ${souEu?'eu':'outro'}"><div class="msg ${souEu?'eu':'outro'}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong><span class="marcador escuro">${escaparHtml(tipoMarcador(remetente))}</span></div>${m.texto?`<div class="msg-texto">${m.texto}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}</div><small class="msg-hora">${dataHoraFormatada(m.criadoEm)}</small></div>`
+  return `<div class="msg-linha ${souEu?'eu':'outro'}"><div class="msg ${souEu?'eu':'outro'}"><div class="msg-cabecalho">${avatar(remetente,'avatar pequeno')}<strong>${escaparHtml(remetente.nome||'Usuário')}</strong>${iconeCargo(remetente)}</div>${m.texto?`<div class="msg-texto">${m.texto}</div>`:''}${m.anexo?`<button class="miniatura-midia" data-midia-url="${m.anexo.url}" data-midia-nome="${escaparHtml(m.anexo.nome||'Mídia')}" data-midia-mime="${escaparHtml(m.anexo.mime||'Imagem')}"><img src="${m.anexo.url}" alt="Mídia da conversa"></button>`:''}</div><small class="msg-hora">${dataHoraFormatada(m.criadoEm)}</small></div>`
 }
 
 function conversaChamadoHtml(){
