@@ -19,6 +19,7 @@ function emptyDb() {
     tickets: [],
     messages: [],
     ticketFeedbacks: [],
+    flaggedUsers: [],
     teamConversations: [],
     teamMessages: [],
     legalAcceptances: [],
@@ -131,6 +132,11 @@ function refreshSubscriptionStatus(db, userId) {
       sub.status = 'past_due';
       sub.updatedAt = nowISO();
       addNotification(db, userId, 'billing', 'Pagamento pendente', 'Seu teste terminou. Regularize a assinatura para liberar todos os recursos.', `trial-ended-${userId}`);
+      const owner = db.users.find(u => u.role === ROLES.OWNER && u.status === 'active');
+      if (owner) {
+        const user = db.users.find(u => u.id === userId);
+        addNotification(db, owner.id, 'billing', `Cliente inadimplente: ${user?.name || 'Cliente'}`, 'O teste grátis terminou e o pagamento não foi confirmado.', `overdue-owner-${userId}`, { kind: 'admin', userId });
+      }
     }
   }
   if (sub.status === 'active' && sub.nextBillingAt) {

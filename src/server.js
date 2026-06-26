@@ -326,6 +326,11 @@ async function handleApi(req, res, url) {
         if (overdueEvents.includes(event)) {
           sub.status = 'past_due';
           addNotification(db, sub.userId, 'billing', 'Pagamento não confirmado', 'Não conseguimos confirmar sua cobrança. Atualize seu método de pagamento.', `overdue-${payment.id || Date.now()}`);
+          const owner = db.users.find(u => u.role === ROLES.OWNER && u.status === 'active');
+          if (owner) {
+            const overdueUser = db.users.find(u => u.id === sub.userId);
+            addNotification(db, owner.id, 'billing', `Cliente inadimplente: ${overdueUser?.name || 'Cliente'}`, 'Pagamento não confirmado pelo gateway.', `overdue-owner-${sub.userId}-${payment.id || Date.now()}`, { kind: 'admin', userId: sub.userId });
+          }
         }
         sub.updatedAt = nowISO();
         db.payments.push({ id: uid('pay'), userId: sub.userId, subscriptionId: sub.id, provider: 'asaas', event, amount: Number(payment.value || config.planPrice), status: payment.status || event, externalId: payment.id || '', payload: body, createdAt: nowISO() });
@@ -777,6 +782,66 @@ async function handleApi(req, res, url) {
       audit(db, user.id, 'admin.user.delete', { userId: target.id });
       writeDb(db);
       return ok(res, { user: exposeUser(db, target) });
+    }
+
+    const adminUserDetailMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (adminUserDetailMatch && method === 'GET') {
+      if (!requireRole(user, [ROLES.OWNER, ROLES.SUPPORT, ROLES.MODERATOR], res)) return;
+      const target = db.users.find(u => u.id === adminUserDetailMatch[1]);
+      if (!target) return fail(res, 404, 'Usuário não encontrado.');
+      if (user.role !== ROLES.OWNER && target.role === ROLES.OWNER) return fail(res, 403, 'Sem permissão.');
+      const targetSub = db.subscriptions.find(s => s.userId === target.id);
+      const targetCompany = companyFor(db, target.id);
+      const flags = db.flaggedUsers.filter(f => f.userId === target.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return ok(res, { user: exposeUser(db, target), subscription: targetSub || null, company: targetCompany || null, flags: flags.map(f => ({ ...f, createdBy: exposeUser(db, db.users.find(u => u.id === f.createdBy)) })) });
+    }
+
+    const adminFlagMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/flag$/);
+    if (adminFlagMatch && method === 'POST') {
+      if (!requireRole(user, [ROLES.OWNER, ROLES.SUPPORT, ROLES.MODERATOR], res)) return;
+      const target = db.users.find(u => u.id === adminFlagMatch[1]);
+      if (!target) return fail(res, 404, 'Usuário não encontrado.');
+      if (target.role === ROLES.OWNER) return fail(res, 403, 'Não é possível sinalizar o proprietário.');
+      const body = await readBody(req);
+      const text = safeString(body.text, 2000);
+      if (!text) return fail(res, 400, 'Informe o motivo da sinalização.');
+      const flag = { id: uid('flg'), userId: target.id, createdBy: user.id, text, createdAt: nowISO() };
+      db.flaggedUsers.push(flag);
+      const staffRoles = [ROLES.OWNER, ROLES.SUPPORT, ROLES.MODERATOR];
+      db.users.filter(u => staffRoles.includes(u.role) && u.status === 'active' && u.id !== user.id).forEach(u => addNotification(db, u.id, 'flag', `Cliente sinalizado: ${target.name}`, text, `flag-${flag.id}-${u.id}`, { kind: 'admin', userId: target.id }));
+      audit(db, user.id, 'user.flag.create', { userId: target.id, flagId: flag.id });
+      writeDb(db);
+      return ok(res, { flag: { ...flag, createdBy: exposeUser(db, user) } });
+    }
+    if (adminFlagMatch && method === 'DELETE') {
+      if (!requireRole(user, [ROLES.OWNER], res)) return;
+      const body = await readBody(req);
+      const flagId = body.flagId;
+      if (!flagId) return fail(res, 400, 'Informe o ID da sinalização.');
+      const idx = db.flaggedUsers.findIndex(f => f.id === flagId && f.userId === adminFlagMatch[1]);
+      if (idx < 0) return fail(res, 404, 'Sinalização não encontrada.');
+      db.flaggedUsers.splice(idx, 1);
+      audit(db, user.id, 'user.flag.delete', { flagId });
+      writeDb(db);
+      return ok(res);
+    }
+
+    if (method === 'POST' && pathname === '/api/admin/notifications') {
+      if (!requireRole(user, [ROLES.OWNER, ROLES.SUPPORT, ROLES.MODERATOR], res)) return;
+      const body = await readBody(req);
+      const targetUserId = body.userId;
+      const type = safeString(body.type, 40) || 'info';
+      const title = safeString(body.title, 180);
+      const msg = safeString(body.text, 2000);
+      if (!targetUserId || !title || !msg) return fail(res, 400, 'Informe usuário, título e mensagem.');
+      const target = db.users.find(u => u.id === targetUserId && u.status === 'active');
+      if (!target) return fail(res, 404, 'Usuário não encontrado.');
+      const targetKindMap = { assinatura: 'billing', suporte: 'ticket', moderação: 'ticket', info: 'info' };
+      const kind = targetKindMap[type] || 'info';
+      const n = addNotification(db, targetUserId, kind, title, msg, `admin-ntf-${targetUserId}-${Date.now()}`, { kind, ticketType: type === 'moderação' ? 'report' : null });
+      audit(db, user.id, 'admin.notification.send', { targetUserId, type, title });
+      writeDb(db);
+      return ok(res, { notification: n });
     }
 
     if (method === 'GET' && pathname === '/api/admin/metrics') {

@@ -10,12 +10,17 @@ const state = {
   supportSubtab: localStorage.getItem('mei_support_subtab') || 'queue',
   dashboard: null, launches: [], obligations: [], tickets: [], currentTicket: null, messages: [], queueInfo: null, ticketFeedback: null,
   metrics: null, users: [], editingUser: null, feedbacks: [], ranking: [],
-  teamOpen: false, teamUsers: [], teamConversations: [], teamMessages: [], currentTeamConversation: null
+  teamOpen: false, teamUsers: [], teamConversations: [], teamMessages: [], currentTeamConversation: null,
+  sidebarCollapsed: localStorage.getItem('mei_sidebar') === 'collapsed',
+  fabOpen: false, chatFilter: 'all',
+  userDetail: null, userFlags: [], flagModalOpen: false,
+  notifyModalOpen: false, notifyUserId: null
 };
 let ticketPollTimer = null;
 let notificationPollTimer = null;
 let teamPollTimer = null;
 let notificationBubbleTimer = null;
+let confirmCallback = null;
 const money = v => Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const dt = v => v ? new Date(v + (String(v).length === 10 ? 'T12:00:00' : '')).toLocaleDateString('pt-BR') : '—';
 const escapeHtml = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -28,8 +33,6 @@ const unreadCount = () => (state.notifications||[]).filter(n=>!n.read).length;
 function roleBadge(user){ return user?.badgeLabel || ({owner:'Fundador',support:'Suporte',moderator:'Moderador',customer:'Cliente'}[user?.role]||'Usuário'); }
 function avatar(user, cls='avatar'){ return user?.avatarUrl ? `<img class="${cls}" src="${user.avatarUrl}" alt="Foto de ${escapeHtml(user.name||'usuário')}">` : `<span class="${cls}">${escapeHtml(user?.initials || String(user?.name||'U').slice(0,1).toUpperCase())}</span>`; }
 function stars(value=0){ const v=Number(value||0); return `<span class="stars">${[1,2,3,4,5].map(i=>`<span class="${i<=Math.round(v)?'on':''}">★</span>`).join('')}</span>`; }
-function feedbackMood(value){ return ({1:'😞',2:'😕',3:'🙂',4:'😄',5:'🤩'}[Number(value)]||'🙂'); }
-
 function icon(name, cls='icon') {
   const paths = {
     logo:'<path d="M9 21h12a4 4 0 0 0 4-4V9a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4Z"/><path d="M10 16V9l5 4 5-4v7"/><path d="M9 21c1.6-4 3.7-6 6-6s4.4 2 6 6"/>',
@@ -49,58 +52,39 @@ function icon(name, cls='icon') {
     plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
     logout:'<path d="M10 17 15 12 10 7"/><path d="M15 12H3"/><path d="M21 3v18"/>',
     settings:'<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 18l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"/>',
-    phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>'
+    phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>',
+    attach:'<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    send:'<path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/>',
+    menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+    chevron:'<path d="m15 18-6-6 6-6"/>',
+    eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>'
   };
   return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.logo}</svg>`;
 }
 function logo() { return `<div class="logo"><div class="logo-mark">${icon('logo')}</div><div><strong>MEI no Controle</strong><small>Faturamento, DAS e obrigações</small></div></div>`; }
 function toast(msg, type='ok') { const el=document.createElement('div'); el.className=`toast ${type}`; el.textContent=msg; $('#toast').appendChild(el); setTimeout(()=>el.remove(),4500); }
 function notificationSeenKey(){ return `mei_seen_notifications_${state.user?.id||'anon'}`; }
-function readSeenNotificationIds(){
-  try { return new Set(JSON.parse(localStorage.getItem(notificationSeenKey()) || '[]')); }
-  catch { return new Set(); }
-}
+function readSeenNotificationIds(){ try { return new Set(JSON.parse(localStorage.getItem(notificationSeenKey()) || '[]')); } catch { return new Set(); } }
 function saveSeenNotificationIds(ids){ localStorage.setItem(notificationSeenKey(), JSON.stringify([...ids].slice(-250))); }
-function iconForNotification(n){ return n?.type === 'billing' ? 'bell' : 'chat'; }
+function iconForNotification(n){
+  if(n?.type==='billing') return 'card';
+  if(n?.type==='flag') return 'flag';
+  return n?.type==='team-chat'?'chat':'bell';
+}
 function notificationItem(n, showTime=true){
   return `<button type="button" class="note notification-item ${n.read?'':'unread'}" data-notification-id="${n.id}"><div class="stat-icon">${icon(iconForNotification(n))}</div><div><strong>${escapeHtml(n.title)}</strong><br><span>${escapeHtml(n.body)}</span>${showTime?`<small>${fmtDateTime(n.createdAt)}</small>`:''}</div></button>`;
 }
-function removeNotificationBubble(){
-  if(notificationBubbleTimer){ clearTimeout(notificationBubbleTimer); notificationBubbleTimer=null; }
-  $('.notification-bubble')?.remove();
-}
-function showNotificationBubble(n){
-  if(!n) return;
-  removeNotificationBubble();
-  const bell=$('#notificationBtn');
-  const el=document.createElement('button');
-  el.type='button';
-  el.className='notification-bubble';
-  el.innerHTML=`<span class="stat-icon">${icon(iconForNotification(n))}</span><span><strong>${escapeHtml(n.title)}</strong><small>${escapeHtml(n.body)}</small></span>`;
-  el.addEventListener('click',()=>openNotification(n));
-  document.body.appendChild(el);
-  const rect=bell?.getBoundingClientRect();
-  if(rect){
-    el.style.top=`${Math.round(rect.bottom + 8)}px`;
-    el.style.right=`${Math.max(12, Math.round(window.innerWidth - rect.right))}px`;
-  } else {
-    el.style.top='78px';
-    el.style.right='24px';
-  }
-  notificationBubbleTimer=setTimeout(removeNotificationBubble,8000);
-}
-function processIncomingNotifications(rows=[]){
-  if(!state.user) return;
-  const seen=readSeenNotificationIds();
-  const unseen=rows.filter(n=>n?.id && !n.read && !seen.has(n.id));
-  if(!unseen.length) return;
-  unseen.forEach(n=>seen.add(n.id));
-  saveSeenNotificationIds(seen);
-  showNotificationBubble(unseen[0]);
-}
-function updateNotificationBadge(){
-  const btn=$('#notificationBtn');
-  if(btn) btn.innerHTML=`${icon('bell')} ${unreadCount()?`<span class="count-dot">${unreadCount()}</span>`:''}`;
+function removeNotificationBubble(){ if(notificationBubbleTimer){ clearTimeout(notificationBubbleTimer); notificationBubbleTimer=null; } $('.notification-bubble')?.remove(); }
+function showNotificationBubble(n){ if(!n) return; removeNotificationBubble(); const bell=$('#notificationBtn'); const el=document.createElement('button'); el.type='button'; el.className='notification-bubble'; el.innerHTML=`<span class="stat-icon">${icon(iconForNotification(n))}</span><span><strong>${escapeHtml(n.title)}</strong><small>${escapeHtml(n.body)}</small></span>`; el.addEventListener('click',()=>openNotification(n)); document.body.appendChild(el); const rect=bell?.getBoundingClientRect(); if(rect){ el.style.top=`${Math.round(rect.bottom + 8)}px`; el.style.right=`${Math.max(12, Math.round(window.innerWidth - rect.right))}px`; } else { el.style.top='60px'; el.style.right='20px'; } notificationBubbleTimer=setTimeout(removeNotificationBubble,8000); }
+function processIncomingNotifications(rows=[]){ if(!state.user) return; const seen=readSeenNotificationIds(); const unseen=rows.filter(n=>n?.id && !n.read && !seen.has(n.id)); if(!unseen.length) return; unseen.forEach(n=>seen.add(n.id)); saveSeenNotificationIds(seen); showNotificationBubble(unseen[0]); }
+function updateNotificationBadge(){ const btn=$('#notificationBtn'); if(btn) btn.innerHTML=`${icon('bell')} ${unreadCount()?`<span class="count-dot">${unreadCount()}</span>`:''}`; }
+
+function showConfirm(title, message, onOk, onCancel) {
+  const id = 'confirm-overlay-' + Date.now();
+  const html = `<div class="confirm-modal" id="${id}"><div class="confirm-box"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(message)}</p><div class="mini-actions"><button class="btn" id="${id}-no">Cancelar</button><button class="btn primary" id="${id}-yes">Confirmar</button></div></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById(`${id}-yes`).onclick = () => { document.getElementById(id).remove(); if(onOk) onOk(); };
+  document.getElementById(`${id}-no`).onclick = () => { document.getElementById(id).remove(); if(onCancel) onCancel(); };
 }
 
 async function api(path, opts={}) {
@@ -127,36 +111,16 @@ async function bootstrap() {
   } catch(e) { localStorage.removeItem('mei_token'); state.token=''; renderLanding(); }
 }
 function startNotificationPolling(){ if(notificationPollTimer) return; notificationPollTimer=setInterval(refreshNotifications,10000); }
-function logout(skipConfirm=false){ if(!skipConfirm && !confirm('Deseja sair da conta?')) return; removeNotificationBubble(); localStorage.removeItem('mei_token'); clearTicketPolling(); clearTeamPolling(); if(notificationPollTimer){clearInterval(notificationPollTimer);notificationPollTimer=null;} Object.assign(state,{token:'',user:null,company:null,subscription:null,tab:'dashboard'}); renderLanding(); }
+function logout(skipConfirm=false){ if(!skipConfirm){ showConfirm('Sair da conta','Deseja sair da conta?',()=>doLogout()); return; } doLogout(); }
+function doLogout(){ removeNotificationBubble(); localStorage.removeItem('mei_token'); clearTicketPolling(); clearTeamPolling(); if(notificationPollTimer){clearInterval(notificationPollTimer);notificationPollTimer=null;} Object.assign(state,{token:'',user:null,company:null,subscription:null,tab:'dashboard'}); renderLanding(); }
 function setTab(tab){ state.tab=tab; localStorage.setItem('mei_tab',tab); renderApp(); loadTabData(); }
 
 function landingHtml(){return `
 <div class="landing">
   <header class="topbar"><div class="topbar-inner">${logo()}<div class="top-actions"><button class="btn ghost" data-open="login">Entrar</button><button class="btn primary" data-open="register">Começar teste grátis</button></div></div></header>
   <main>
-    <section class="hero">
-      <div>
-        <span class="eyebrow">${icon('shield')} Plataforma brasileira para MEI</span>
-        <h1>Controle seu MEI sem planilha confusa.</h1>
-        <p>Registre faturamento, acompanhe o limite anual, organize o DAS, prepare sua DASN-SIMEI e fale com suporte por protocolo sempre que precisar.</p>
-        <div class="hero-actions"><button class="btn primary" data-open="register">Começar teste grátis por 7 dias</button><button class="btn" data-open="login">Já tenho conta</button></div>
-        <div class="trust-row"><div class="trust"><strong>R$ 81 mil</strong><span>limite anual de referência</span></div><div class="trust"><strong>DAS</strong><span>alertas de vencimento mensal</span></div><div class="trust"><strong>LGPD</strong><span>privacidade, aceite e exclusão</span></div></div>
-      </div>
-      <div class="product-card"><div class="mini-browser"><div class="browser-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><div class="browser-body">
-        <div class="limit-card"><small>FATURAMENTO ACUMULADO</small><h3>R$ 46.280,00</h3><div class="bar"><span></span></div><p>57% do limite anual utilizado</p></div>
-        <div class="dash-grid"><div class="mini-stat"><i>${icon('wallet')}</i><b>R$ 8.750</b><span>Receita do mês</span></div><div class="mini-stat"><i>${icon('calendar')}</i><b>3 dias</b><span>Próximo DAS</span></div><div class="mini-stat"><i>${icon('chat')}</i><b>SUP-00018</b><span>Protocolo aberto</span></div><div class="mini-stat"><i>${icon('shield')}</i><b>Seguro</b><span>Dados com controle</span></div></div>
-      </div></div></div>
-    </section>
-    <section class="section"><div class="section-title"><div><h2>Um sistema simples para rotina real de MEI</h2><p class="lead">Feito para quem vende, presta serviço, emite DAS e precisa enxergar o negócio sem depender de planilha quebrada.</p></div></div>
-      <div class="cards">
-        ${feature('chart','Limite do MEI','Veja faturamento acumulado, percentual usado e quanto ainda falta para o limite anual.')}
-        ${feature('receipt','DAS e DASN-SIMEI','Calendário fiscal com vencimentos, comprovantes e status de pagamento.')}
-        ${feature('chat','Suporte com protocolo','Abra chamados, envie imagens e acompanhe atendimento até finalizar.')}
-        ${feature('flag','Moderação e denúncias','Canal separado para reportar uso indevido, má fé ou problemas de segurança.')}
-        ${feature('card','Assinatura mensal','Teste grátis com checkout de cartão via gateway e avisos de cobrança.')}
-        ${feature('shield','LGPD desde o início','Termos, privacidade, cookies, exportação e solicitação de exclusão de conta.')}
-      </div>
-    </section>
+    <section class="hero"><div><span class="eyebrow">${icon('shield')} Plataforma brasileira para MEI</span><h1>Controle seu MEI sem planilha confusa.</h1><p>Registre faturamento, acompanhe o limite anual, organize o DAS, prepare sua DASN-SIMEI e fale com suporte por protocolo sempre que precisar.</p><div class="hero-actions"><button class="btn primary" data-open="register">Começar teste grátis por 7 dias</button><button class="btn" data-open="login">Já tenho conta</button></div><div class="trust-row"><div class="trust"><strong>R$ 81 mil</strong><span>limite anual de referência</span></div><div class="trust"><strong>DAS</strong><span>alertas de vencimento mensal</span></div><div class="trust"><strong>LGPD</strong><span>privacidade, aceite e exclusão</span></div></div></div><div class="product-card"><div class="mini-browser"><div class="browser-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><div class="browser-body"><div class="limit-card"><small>FATURAMENTO ACUMULADO</small><h3>R$ 46.280,00</h3><div class="bar"><span></span></div><p>57% do limite anual utilizado</p></div><div class="dash-grid"><div class="mini-stat"><i>${icon('wallet')}</i><b>R$ 8.750</b><span>Receita do mês</span></div><div class="mini-stat"><i>${icon('calendar')}</i><b>3 dias</b><span>Próximo DAS</span></div><div class="mini-stat"><i>${icon('chat')}</i><b>SUP-00018</b><span>Protocolo aberto</span></div><div class="mini-stat"><i>${icon('shield')}</i><b>Seguro</b><span>Dados com controle</span></div></div></div></div></div></section>
+    <section class="section"><div class="section-title"><div><h2>Um sistema simples para rotina real de MEI</h2><p class="lead">Feito para quem vende, presta serviço, emite DAS e precisa enxergar o negócio sem depender de planilha quebrada.</p></div></div><div class="cards">${feature('chart','Limite do MEI','Veja faturamento acumulado, percentual usado e quanto ainda falta para o limite anual.')}${feature('receipt','DAS e DASN-SIMEI','Calendário fiscal com vencimentos, comprovantes e status de pagamento.')}${feature('chat','Suporte com protocolo','Abra chamados, envie imagens e acompanhe atendimento até finalizar.')}${feature('flag','Moderação e denúncias','Canal separado para reportar uso indevido, má fé ou problemas de segurança.')}${feature('card','Assinatura mensal','Teste grátis com checkout de cartão via gateway e avisos de cobrança.')}${feature('shield','LGPD desde o início','Termos, privacidade, cookies, exportação e solicitação de exclusão de conta.')}</div></section>
     <section class="section"><div class="pricing"><div><h2>Plano Pro MEI</h2><p>Comece com 7 dias de teste. Após o período gratuito, a assinatura mensal mantém seu painel, relatórios, suporte e histórico seguro.</p><div class="mini-actions"><span class="tag ok">Sem planilha</span><span class="tag ok">Suporte por protocolo</span><span class="tag ok">Dados salvos</span></div></div><div class="price-box"><div class="price">R$ 24,90 <small>/mês</small></div><p>Cancelamento pela plataforma, respeitando cobranças pendentes e regras de retenção legal.</p><button class="btn primary block" data-open="register">Criar minha conta</button></div></div></section>
   </main>
 </div>${cookieBanner()}`}
@@ -174,17 +138,12 @@ function navItems(){
   if(state.user?.role==='moderator') return [['moderation','flag','Denúncias'],['account','settings','Conta']];
   return [['dashboard','chart','Dashboard'],['launches','wallet','Lançamentos'],['obligations','calendar','Obrigações'],['reports','file','Relatórios'],['support','chat','Suporte'],['report','flag','Denúncias'],['billing','card','Assinatura'],['account','settings','Conta']];
 }
-function normalizeTab(){
-  const items = navItems();
-  if(items.some(([id])=>id===state.tab)) return;
-  state.tab = items[0]?.[0] || 'dashboard';
-  localStorage.setItem('mei_tab', state.tab);
-}
+function normalizeTab(){ const items = navItems(); if(items.some(([id])=>id===state.tab)) return; state.tab = items[0]?.[0] || 'dashboard'; localStorage.setItem('mei_tab', state.tab); }
 function titleForTab(){ return ({dashboard:'Dashboard',launches:'Lançamentos',obligations:'Obrigações fiscais',reports:'Relatórios',support:'Suporte por protocolo',report:'Denúncias e uso indevido',moderation:'Fila de moderação',billing:'Assinatura',account:'Conta e privacidade',admin:'Administração'}[state.tab]||'Painel'); }
 function subtitleForTab(){ return ({dashboard:'Resumo do faturamento, limite anual e próximos vencimentos.',launches:'Receitas e despesas do seu MEI.',obligations:'DAS, DASN-SIMEI, comprovantes e status.',reports:'Resumo mensal para conferência ou envio ao contador.',support:'Abra ou acompanhe conversas com a equipe de suporte.',report:'Reporte abuso, má fé ou uso indevido da plataforma.',moderation:'Protocolos de denúncia com bloqueio por atendente.',billing:'Teste grátis, checkout e cobranças.',account:'Dados do MEI, notificações, cookies e LGPD.',admin:'Usuários internos, métricas e permissões.'}[state.tab]||''); }
 function profileSummary(){
   const u=state.user||{};
-  return `<button class="user-card profile-card" id="profileBtn">${avatar(u)}<span><strong>${escapeHtml(u.name)}</strong><small>${escapeHtml(roleBadge(u))} · ${u.ratingCount?`${u.ratingAvg} (${u.ratingCount})`:'sem avaliações'}</small><small>${escapeHtml(u.email)}</small></span></button>`;
+  return `<button class="user-card profile-card" id="profileBtn">${avatar(u)}<span><strong>${escapeHtml(u.name)}</strong><small>${escapeHtml(roleBadge(u))}</small><small>${escapeHtml(u.email)}</small></span></button>`;
 }
 function notificationPanel(){
   if(!state.notificationOpen) return '';
@@ -192,10 +151,25 @@ function notificationPanel(){
   return `<div class="notifications-pop"><div class="section-title compact"><h3>Notificações</h3><button class="btn" id="markNotificationsBtn">Marcar lidas</button></div>${rows.length?rows.slice(0,12).map(n=>notificationItem(n)).join(''):'<div class="empty">Nenhuma notificação.</div>'}</div>`;
 }
 function mediaModal(){ if(!state.mediaModal) return ''; const m=state.mediaModal; return `<div class="modal-backdrop media-backdrop"><div class="modal media-view"><div class="modal-head"><div><h2>${escapeHtml(m.name||'Mídia')}</h2><p class="lead">${escapeHtml(m.mime||'Imagem')}</p></div><button class="close" id="closeMediaModal">×</button></div><img src="${m.url}" alt="${escapeHtml(m.name||'Mídia da conversa')}"></div></div>`; }
-function profileModal(){ if(!state.profileModal) return ''; const u=state.profileModal; return `<div class="modal-backdrop"><div class="modal profile-modal"><div class="modal-head"><div><h2>${escapeHtml(u.name)}</h2><p class="lead">${escapeHtml(u.email||'')}</p></div><button class="close" id="closeProfileModal">×</button></div><div class="profile-large">${avatar(u,'avatar big')}<div><span class="tag dark">${escapeHtml(roleBadge(u))}</span><div>${stars(u.ratingAvg)} <strong>${u.ratingAvg||'0.0'}</strong> <span class="muted">(${u.ratingCount||0} avaliações)</span></div></div></div></div></div>`; }
+function profileDetailModal(){
+  if(!state.userDetail) return '';
+  const u=state.userDetail; const sub=state.userDetailSub||{}; const cmp=state.userDetailCompany||{}; const flags=state.userFlags||[];
+  const canFlag=isStaff() && u.id!==state.user.id && u.role!=='owner';
+  const canRemoveFlag=state.user?.role==='owner';
+  return `<div class="modal-backdrop"><div class="modal wide"><div class="modal-head"><div><h2>${escapeHtml(u.name)}</h2><p class="lead">${escapeHtml(u.email||'')}</p></div><button class="close" id="closeProfileDetail">×</button></div><div class="profile-detail"><div class="profile-large">${avatar(u,'avatar big')}<div><span class="tag dark">${escapeHtml(roleBadge(u))}</span><div>${stars(u.ratingAvg)} <strong>${u.ratingAvg||'0.0'}</strong> <span class="muted">(${u.ratingCount||0} avaliações)</span></div></div></div><div class="kpi-line"><span>E-mail</span><strong>${escapeHtml(u.email||'—')}</strong></div><div class="kpi-line"><span>Telefone</span><strong>${escapeHtml(u.phone||'—')}</strong></div><div class="kpi-line"><span>CPF/CNPJ</span><strong>${escapeHtml(u.cpfCnpj||'—')}</strong></div><div class="kpi-line"><span>Status</span>${statusTag(u.status)}</div><div class="kpi-line"><span>Cadastro</span><strong>${fmtDateTime(u.createdAt)}</strong></div><div class="kpi-line"><span>Último acesso</span><strong>${fmtDateTime(u.lastLoginAt)}</strong></div>${cmp?.businessName?`<div class="kpi-line"><span>Negócio</span><strong>${escapeHtml(cmp.businessName)}</strong></div><div class="kpi-line"><span>CNPJ</span><strong>${escapeHtml(cmp.cnpj||'—')}</strong></div><div class="kpi-line"><span>Atividade</span><strong>${escapeHtml(cmp.activityType||'—')}</strong></div>`:''}${sub?.planName?`<div class="kpi-line"><span>Plano</span><strong>${escapeHtml(sub.planName)}</strong></div><div class="kpi-line"><span>Assinatura</span>${statusTag(sub.status)}</div>`:''}</div><div style="margin-top:14px"><h3 style="font-size:15px">Sinalizações</h3>${flags.length?flags.map(f=>`<div class="flag-item"><div><div class="flag-text">${escapeHtml(f.text)}</div><div class="flag-meta">Por ${escapeHtml(f.createdBy?.name||'Equipe')} em ${fmtDateTime(f.createdAt)}</div></div>${canRemoveFlag?`<button class="btn danger" data-del-flag="${f.id}">Remover</button>`:''}</div>`).join(''):'<div class="empty">Nenhuma sinalização.</div>'}${canFlag?`<div style="margin-top:10px"><button class="btn danger" id="toggleFlagForm">Sinalizar cliente</button><form id="flagForm" class="form" style="display:none;margin-top:8px"><div class="field"><label>Motivo da sinalização</label><textarea name="text" required placeholder="Ex: Cliente não pagou a mensalidade..."></textarea></div><button class="btn danger block">Sinalizar</button></form></div>`:''}</div></div></div>`;
+}
+function flagModalHtml(){
+  if(!state.flagModalOpen) return '';
+  return `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Sinalizar cliente</h2><p class="lead">Marque um cliente com informações para a equipe.</p></div><button class="close" id="closeFlagModal">×</button></div><form id="flagUserForm" class="form"><div class="field"><label>Motivo</label><textarea name="text" required placeholder="Descreva o motivo da sinalização..."></textarea></div><button class="btn danger block">Sinalizar</button></form></div></div>`;
+}
+function notifyModalHtml(){
+  if(!state.notifyModalOpen || !state.notifyUserId) return '';
+  const target = state.users.find(u=>u.id===state.notifyUserId)||{};
+  return `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Enviar notificação</h2><p class="lead">Para: ${escapeHtml(target.name||'Usuário')} (${escapeHtml(target.email||'—')})</p></div><button class="close" id="closeNotifyModal">×</button></div><form id="sendNotifyForm" class="form send-notification-form"><div class="field"><label>Tipo</label><select name="type"><option value="assinatura">Assinatura / Cobrança</option><option value="suporte">Suporte</option><option value="moderação">Moderação</option><option value="info">Informação geral</option></select></div><div class="field"><label>Título</label><input name="title" required placeholder="Ex: Pagamento necessário"></div><div class="field"><label>Mensagem</label><textarea name="text" required placeholder="Escreva a mensagem para o cliente..."></textarea></div><button class="btn primary block">Enviar notificação</button></form></div></div>`;
+}
 function teamMessageBubble(m){
   if(m.system) return `<div class="msg system"><strong>Sistema</strong><div>${escapeHtml(m.text||'')}</div><small>${fmtDateTime(m.createdAt)}</small></div>`;
-  const sender=m.sender||{}; const cls=sender.id===state.user.id?'me':'';
+  const sender=m.sender||{}; const cls=sender.id===state.user.id?'me':'other';
   return `<div class="msg team-chat-msg ${cls}"><div class="msg-head">${avatar(sender,'avatar tiny')}<strong>${escapeHtml(sender.name||'Usuário')}</strong><span class="tag dark">${escapeHtml(roleBadge(sender))}</span></div>${m.text?`<div class="msg-text">${escapeHtml(m.text)}</div>`:''}${m.attachment?`<button class="media-thumb" data-media-url="${m.attachment.url}" data-media-name="${escapeHtml(m.attachment.name||'Mídia')}" data-media-mime="${escapeHtml(m.attachment.mime||'Imagem')}"><img src="${m.attachment.url}" alt="Mídia da conversa"></button>`:''}<small>${fmtDateTime(m.createdAt)}</small></div>`;
 }
 function teamChatModal(){
@@ -203,24 +177,100 @@ function teamChatModal(){
   const conv=state.currentTeamConversation;
   const available=(state.teamUsers||[]).filter(u=>u.id!==state.user.id);
   const canAdmin=conv && (conv.adminId===state.user.id || state.user.role==='owner');
-  return `<div class="team-floating"><div class="team-head"><strong>Chat da equipe</strong><button class="close" id="closeTeamChat">×</button></div><div class="team-body"><aside class="team-list"><form id="teamConversationForm" class="team-create"><input name="title" placeholder="Nome do grupo opcional"><div class="team-users">${available.map(u=>`<label title="${escapeHtml(u.email)}"><input type="checkbox" name="memberIds" value="${u.id}">${avatar(u,'avatar tiny')} ${escapeHtml(u.name)}</label>`).join('')}</div><button class="btn primary block">Nova conversa</button></form><div class="team-convs">${(state.teamConversations||[]).map(c=>`<button class="${conv?.id===c.id?'active':''}" data-open-team="${c.id}"><strong>${escapeHtml(c.title||c.members?.filter(m=>m?.id!==state.user.id).map(m=>m.name).join(', ')||'Conversa')}</strong><small>${escapeHtml(c.lastMessage?.text||'Sem mensagens')}</small></button>`).join('')||'<div class="empty">Nenhuma conversa.</div>'}</div></aside><main class="team-thread">${conv?`<div class="team-thread-head"><div><strong>${escapeHtml(conv.title||'Conversa')}</strong><small>${conv.members?.map(m=>`${m.name} (${roleBadge(m)})`).join(' · ')}</small></div><div class="mini-actions">${canAdmin&&conv.type==='group'?`<select id="addTeamMember"><option value="">Adicionar membro</option>${available.filter(u=>!conv.members.some(m=>m.id===u.id)).map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('')}</select><select id="removeTeamMember"><option value="">Remover membro</option>${conv.members.filter(m=>m.id!==state.user.id).map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select>`:''}<button class="btn danger" id="deleteTeamConversation">Excluir</button></div></div><div class="chat team-chat">${(state.teamMessages||[]).map(teamMessageBubble).join('')}</div><form id="teamMessageForm" class="form chat-compose"><textarea name="text" placeholder="Mensagem para a equipe"></textarea><label class="file-inline">Imagem <input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="btn primary">Enviar</button></form>`:'<div class="empty">Abra ou crie uma conversa.</div>'}</main></div></div>`;
+  return `<div class="team-floating"><div class="team-head"><strong>Chat da equipe</strong><button class="close" id="closeTeamChat">×</button></div><div class="team-body"><aside class="team-list"><form id="teamConversationForm" class="team-create"><input name="title" placeholder="Nome do grupo opcional"><div class="team-users">${available.map(u=>`<label title="${escapeHtml(u.email)}"><input type="checkbox" name="memberIds" value="${u.id}">${avatar(u,'avatar tiny')} ${escapeHtml(u.name)}</label>`).join('')}</div><button class="btn primary block">Nova conversa</button></form><div class="team-convs">${(state.teamConversations||[]).map(c=>`<button class="${conv?.id===c.id?'active':''}" data-open-team="${c.id}"><strong>${escapeHtml(c.title||c.members?.filter(m=>m?.id!==state.user.id).map(m=>m.name).join(', ')||'Conversa')}</strong><small>${escapeHtml(c.lastMessage?.text||'Sem mensagens')}</small></button>`).join('')||'<div class="empty">Nenhuma conversa.</div>'}</div></aside><main class="team-thread">${conv?`<div class="team-thread-head"><div><strong>${escapeHtml(conv.title||'Conversa')}</strong><small>${conv.members?.map(m=>`${m.name} (${roleBadge(m)})`).join(' · ')}</small></div><div class="mini-actions">${canAdmin&&conv.type==='group'?`<select id="addTeamMember"><option value="">Adicionar membro</option>${available.filter(u=>!conv.members.some(m=>m.id===u.id)).map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('')}</select><select id="removeTeamMember"><option value="">Remover membro</option>${conv.members.filter(m=>m.id!==state.user.id).map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select>`:''}<button class="btn danger" id="deleteTeamConversation">Excluir</button></div></div><div class="team-chat">${(state.teamMessages||[]).map(teamMessageBubble).join('')}</div><form id="teamMessageForm" class="chat-compose"><textarea name="text" placeholder="Mensagem para a equipe"></textarea><label class="file-inline" title="Anexar imagem">${icon('attach')}<input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="btn primary">${icon('send')}</button></form>`:'<div class="empty">Selecione uma conversa</div>'}</main></div></div>`;
+}
+function fabModal(){
+  if(!state.fabOpen) return '';
+  const canSeeCommon = isStaff();
+  return `<div class="fab-modal"><div class="fab-head"><strong>Conversas</strong><button class="close" id="closeFab">×</button></div><div class="fab-body">${canSeeCommon?`<button class="fab-chat-item" id="fabCommon"><div class="stat-icon">${icon('users')}</div><div><strong>Chat comum</strong><span style="display:block;font-size:10px;color:var(--muted)">Conversa entre equipe</span></div></button>`:''}<button class="fab-chat-item" id="fabSupport"><div class="stat-icon">${icon('chat')}</div><div><strong>Chat suporte</strong><span style="display:block;font-size:10px;color:var(--muted)">Protocolos de atendimento</span></div></button><button class="fab-chat-item" id="fabModeration"><div class="stat-icon">${icon('flag')}</div><div><strong>Chat moderação</strong><span style="display:block;font-size:10px;color:var(--muted)">Protocolos de denúncia</span></div></button></div></div>`;
 }
 function renderApp(){
   if(!state.user) return renderLanding();
   normalizeTab();
-  app.innerHTML = `<div class="shell"><aside class="sidebar" id="sidebar">${logo()}${profileSummary()}<nav class="nav">${navItems().map(([id,ic,label])=>`<button class="${state.tab===id?'active':''}" data-tab="${id}">${icon(ic)} ${label}</button>`).join('')}</nav><div class="sidebar-foot">${isStaff()?'<button class="btn block" id="teamChatBtn">'+icon('chat')+' Chat equipe</button>':''}<button class="btn block" id="refreshBtn">Atualizar</button><button class="btn danger block" id="logoutBtn">${icon('logout')} Sair</button></div></aside><main class="main"><header class="main-top"><div><button class="btn mobile-menu" id="menuBtn">Menu</button><h1>${titleForTab()}</h1><p>${subtitleForTab()}</p></div><div class="mini-actions">${state.subscription?statusTag(state.subscription.status):''}<button class="btn" id="notificationBtn">${icon('bell')} ${unreadCount()?`<span class="count-dot">${unreadCount()}</span>`:''}</button>${isStaff()?'<button class="btn" id="teamChatTopBtn">'+icon('chat')+' Equipe</button>':''}<button class="btn primary" id="quickAction">${quickActionLabel()}</button></div>${notificationPanel()}</header><section class="content" id="content">${renderTab()}</section></main></div>${ticketModal()}${mediaModal()}${profileModal()}${userEditModal()}${teamChatModal()}${cookieBanner()}`;
+  const collapsed = state.sidebarCollapsed;
+  app.innerHTML = `<div class="shell"><aside class="sidebar${collapsed?' collapsed':''}" id="sidebar">${logo()}${profileSummary()}<nav class="nav">${navItems().map(([id,ic,label])=>`<button class="${state.tab===id?'active':''}" data-tab="${id}">${icon(ic)} <span class="nav-icon-label">${label}</span></button>`).join('')}</nav><div class="sidebar-foot">${isStaff()?`<button class="btn block" id="teamChatBtn">${icon('chat')} <span class="nav-icon-label">Chat equipe</span></button>`:''}<button class="btn block" id="refreshBtn">${icon('chart')} <span class="nav-icon-label">Atualizar</span></button><button class="btn danger block" id="logoutBtn">${icon('logout')} <span class="nav-icon-label">Sair</span></button></div></aside><main class="main"><header class="main-top"><div style="display:flex;align-items:center;gap:10px"><button class="btn" id="menuBtn" style="display:none">${icon('menu')}</button><button class="btn" id="sidebarToggleBtn">${icon('chevron')}</button><div><h1>${titleForTab()}</h1><p>${subtitleForTab()}</p></div></div><div class="mini-actions">${state.subscription?statusTag(state.subscription.status):''}<button class="btn" id="notificationBtn">${icon('bell')} ${unreadCount()?`<span class="count-dot">${unreadCount()}</span>`:''}</button>${isStaff()?`<button class="btn" id="teamChatTopBtn">${icon('chat')} Equipe</button>`:''}<button class="btn primary" id="quickAction">${quickActionLabel()}</button></div>${notificationPanel()}</header><section class="content" id="content">${renderTab()}</section></main></div>${ticketModal()}${mediaModal()}${profileDetailModal()}${flagModalHtml()}${notifyModalHtml()}${teamChatModal()}${isStaff()?`<button class="fab-chat" id="fabBtn" title="Conversas">${icon('chat')}</button>${fabModal()}`:''}${cookieBanner()}`;
   bindShell(); bindTab(); bindCookie();
 }
 function bindShell(){
   $$('.nav button').forEach(b=>b.onclick=()=>{setTab(b.dataset.tab); $('#sidebar')?.classList.remove('open')});
-  $('#logoutBtn')?.addEventListener('click',()=>logout()); $('#logoutBtn')?.setAttribute('aria-label','Sair'); $('#refreshBtn')?.addEventListener('click',()=>loadTabData(true)); $('#menuBtn')?.addEventListener('click',()=>$('#sidebar')?.classList.add('open'));
-  $('#profileBtn')?.addEventListener('click',()=>{state.profileModal=state.user;renderApp();});
+  $('#logoutBtn')?.addEventListener('click',()=>logout());
+  $('#refreshBtn')?.addEventListener('click',()=>loadTabData(true));
+  $('#menuBtn')?.addEventListener('click',()=>$('#sidebar')?.classList.toggle('open'));
+  $('#sidebarToggleBtn')?.addEventListener('click',toggleSidebar);
+  $('#profileBtn')?.addEventListener('click',()=>{if(isStaff()){openUserDetail(state.user.id)}else{state.userDetail=state.user;state.userDetailSub=state.subscription;state.userDetailCompany=state.company;state.userFlags=[];renderApp();}});
   $('#notificationBtn')?.addEventListener('click',()=>{state.notificationOpen=!state.notificationOpen;renderApp();});
   $('#markNotificationsBtn')?.addEventListener('click',markNotificationsRead);
   $$('[data-notification-id]').forEach(b=>b.onclick=()=>openNotificationById(b.dataset.notificationId));
   $('#teamChatBtn')?.addEventListener('click',openTeamChat);
   $('#teamChatTopBtn')?.addEventListener('click',openTeamChat);
+  $('#fabBtn')?.addEventListener('click',()=>{state.fabOpen=!state.fabOpen;renderApp();});
+  $('#closeFab')?.addEventListener('click',()=>{state.fabOpen=false;renderApp();});
+  $('#fabSupport')?.addEventListener('click',()=>{state.fabOpen=false;setTab('support');});
+  $('#fabModeration')?.addEventListener('click',()=>{state.fabOpen=false;setTab(isStaff()?'moderation':'report');});
+  $('#fabCommon')?.addEventListener('click',()=>{state.fabOpen=false;openTeamChat();});
+  $('#closeProfileDetail')?.addEventListener('click',()=>{state.userDetail=null;renderApp();});
+  $('#closeFlagModal')?.addEventListener('click',()=>{state.flagModalOpen=false;renderApp();});
+  $('#closeNotifyModal')?.addEventListener('click',()=>{state.notifyModalOpen=false;state.notifyUserId=null;renderApp();});
   $('#quickAction')?.addEventListener('click',()=>{ if(state.tab==='launches') $('#launchTitle')?.focus(); else if(isCustomer()&&!planOk()) setTab('billing'); else if(isCustomer()) setTab('launches'); else setTab(state.user.role==='moderator'?'moderation':'support'); });
+  $('#toggleFlagForm')?.addEventListener('click',()=>{const form=$('#flagForm'); if(form) form.style.display=form.style.display==='none'?'grid':'none';});
+  $('#flagForm')?.addEventListener('submit',submitFlag);
+  $$('[data-del-flag]').forEach(b=>b.onclick=()=>deleteFlag(b.dataset.delFlag));
+  $('#flagUserForm')?.addEventListener('submit',submitFlagUserForm);
+  $('#sendNotifyForm')?.addEventListener('submit',submitSendNotify);
+}
+function toggleSidebar(){
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  localStorage.setItem('mei_sidebar', state.sidebarCollapsed?'collapsed':'expanded');
+  renderApp();
+}
+async function openUserDetail(userId){
+  try{
+    const data = await api(`/api/admin/users/${userId}`);
+    state.userDetail = data.user;
+    state.userDetailSub = data.subscription;
+    state.userDetailCompany = data.company;
+    state.userFlags = data.flags||[];
+    renderApp();
+  }catch(err){toast(err.message,'error')}
+}
+async function submitFlag(e){
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try{
+    await api(`/api/admin/users/${state.userDetail.id}/flag`,{method:'POST',body:JSON.stringify({text:fd.get('text')})});
+    toast('Cliente sinalizado.');
+    await openUserDetail(state.userDetail.id);
+  }catch(err){toast(err.message,'error')}
+}
+async function deleteFlag(flagId){
+  showConfirm('Remover sinalização','Deseja remover esta sinalização?',async()=>{
+    try{
+      await api(`/api/admin/users/${state.userDetail.id}/flag`,{method:'DELETE',body:JSON.stringify({flagId})});
+      toast('Sinalização removida.');
+      await openUserDetail(state.userDetail.id);
+    }catch(err){toast(err.message,'error')}
+  });
+}
+async function submitFlagUserForm(e){
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try{
+    await api(`/api/admin/users/${state.flagUserId}/flag`,{method:'POST',body:JSON.stringify({text:fd.get('text')})});
+    toast('Cliente sinalizado.');
+    state.flagModalOpen=false;state.flagUserId=null;
+    renderApp();loadTabData();
+  }catch(err){toast(err.message,'error')}
+}
+async function submitSendNotify(e){
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = { userId: state.notifyUserId, type: fd.get('type'), title: fd.get('title'), text: fd.get('text') };
+  try{
+    await api('/api/admin/notifications',{method:'POST',body:JSON.stringify(body)});
+    toast('Notificação enviada ao cliente.');
+    state.notifyModalOpen=false;state.notifyUserId=null;
+    renderApp();loadTabData();
+  }catch(err){toast(err.message,'error')}
 }
 function openNotificationById(id){
   const notification=(state.notifications||[]).find(n=>n.id===id);
@@ -237,28 +287,34 @@ async function openNotification(notification){
   if(target.kind==='ticket' && target.ticketId){
     const tab=target.ticketType==='report' ? (isStaff()?'moderation':'report') : 'support';
     state.tab=tab; localStorage.setItem('mei_tab',tab);
-    renderApp();
-    await loadTabData();
-    await openTicket(target.ticketId);
-    return;
+    renderApp(); await loadTabData(); await openTicket(target.ticketId); return;
   }
   if(target.kind==='team-chat' && target.conversationId && isStaff()){
-    await openTeamChat();
-    await openTeamConversation(target.conversationId);
-    return;
+    await openTeamChat(); await openTeamConversation(target.conversationId); return;
+  }
+  if(target.kind==='admin' && target.userId && isStaff()){
+    setTab('admin'); await loadTabData();
+    setTimeout(()=>openUserDetail(target.userId),200); return;
   }
   if(target.kind==='billing'){ setTab('billing'); return; }
   if(notification.type==='team-chat' && isStaff()){ await openTeamChat(); return; }
+  if(notification.type==='flag' && isStaff()){ setTab('admin'); return; }
   if(['ticket','feedback'].includes(notification.type)){ setTab(isStaff() ? (state.user.role==='moderator'?'moderation':'support') : 'support'); return; }
   renderApp();
 }
 function quickActionLabel(){ if(isCustomer()&&!planOk()) return 'Liberar teste'; if(state.tab==='launches') return 'Novo lançamento'; if(isCustomer()) return 'Novo lançamento'; return 'Ver fila'; }
 function statusTag(s){ const map={pending_checkout:['warn','Checkout pendente'],trialing:['ok','Teste grátis'],active:['ok','Plano ativo'],past_due:['danger','Pagamento pendente'],canceled:['danger','Cancelado']}; const m=map[s]||['dark',s]; return `<span class="tag ${m[0]}">${m[1]}</span>`; }
 function renderTab(){
-  if(isCustomer() && !planOk() && !['billing','support','report','account'].includes(state.tab)) return lockView();
+  if(isCustomer() && !planOk() && !['billing','support','report','account'].includes(state.tab)){
+    const warnType = state.subscription?.status==='past_due'?'page-type-warn':'';
+    return `<div class="lock"><div><h2>Finalize o checkout para liberar o painel</h2><p>Seu cadastro está pronto. Para iniciar o teste grátis de 7 dias, valide o método de pagamento pelo checkout seguro. Depois disso, os módulos de faturamento, obrigações e relatórios ficam disponíveis.</p><div class="mini-actions"><span class="tag ok">7 dias grátis</span><span class="tag ok">Dados salvos</span><span class="tag ok">Cancelamento pela conta</span></div></div><div><button class="btn primary block" id="startTrialBtn">Iniciar teste com checkout</button><button class="btn block" onclick="setTab('support')">Falar com suporte</button></div></div>`;
+  }
+  if(state.subscription?.status==='past_due' && !isStaff() && !['billing','support','report','account'].includes(state.tab)){
+    return `<div class="lock"><div><h2>Pagamento pendente</h2><p>Seu plano está com pagamento em atraso. Regularize a assinatura para liberar todos os recursos do painel.</p></div><div><button class="btn primary block" onclick="setTab('billing')">Ver assinatura</button><button class="btn block" onclick="setTab('support')">Falar com suporte</button></div></div>`;
+  }
   return ({dashboard:dashboardView, launches:launchesView, obligations:obligationsView, reports:reportsView, support:supportView, report:reportView, moderation:moderationView, billing:billingView, account:accountView, admin:adminView}[state.tab] || dashboardView)();
 }
-function lockView(){ return `<div class="lock"><div><h2>Finalize o checkout para liberar o painel</h2><p>Seu cadastro está pronto. Para iniciar o teste grátis de 7 dias, valide o método de pagamento pelo checkout seguro. Depois disso, os módulos de faturamento, obrigações e relatórios ficam disponíveis.</p><div class="mini-actions"><span class="tag ok">7 dias grátis</span><span class="tag ok">Dados salvos</span><span class="tag ok">Cancelamento pela conta</span></div></div><div><button class="btn primary block" id="startTrialBtn">Iniciar teste com checkout</button><button class="btn block" onclick="setTab('support')">Falar com suporte</button></div></div>`; }
+function lockView(){ return ''; } // handled in renderTab now
 function dashboardView(){
   const d=state.dashboard; if(!d) return loadingPanel('Carregando dashboard...'); const c=d.current||{}; const pct=Math.min(100,c.percent||0); const statusClass=c.status==='limit_exceeded'?'danger':c.status==='warning'?'warn':'ok';
   return `<div class="grid"><div class="panel soft"><div class="section-title"><div><h2>Faturamento acumulado de ${d.year}</h2><p class="lead">${money(c.accumulated)} de ${money(d.company.annualLimit)} usados no limite de referência.</p></div><span class="tag ${statusClass}">${c.percent||0}% do limite</span></div><div class="progress"><span style="width:${pct}%"></span></div></div>
@@ -281,7 +337,7 @@ function reportView(){ return `<div class="grid cols-2"><div class="panel"><h2>R
 function moderationView(){ return staffTicketsView('report','Moderação e denúncias'); }
 function ticketForm(type){return `<form id="ticketForm" class="form" data-type="${type}"><div class="field"><label>Título</label><input name="title" required placeholder="Descreva o assunto principal"></div><div class="field"><label>Categoria</label><select name="category">${type==='report'?'<option>Uso indevido</option><option>Fraude ou má fé</option><option>Abuso</option><option>Segurança</option>':'<option>Pagamento</option><option>DAS e obrigações</option><option>Faturamento</option><option>Erro no sistema</option><option>Conta e dados</option>'}</select></div><div class="field"><label>Mensagem</label><textarea name="description" required></textarea></div><div class="field"><label>Imagem opcional</label><input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><button class="btn primary block">Abrir protocolo</button></form>`}
 function staffTicketsView(type,title){
-  return `<div class="grid"><div class="panel"><div class="section-title compact"><div><h2>${title}</h2><p class="lead">Urgentes aparecem no topo; use os filtros para separar abertos, em atendimento e finalizados.</p></div><div class="segmented"><button class="${state.supportSubtab==='queue'?'active':''}" data-support-subtab="queue">Fila</button><button class="${state.supportSubtab==='experience'?'active':''}" data-support-subtab="experience">Experiência</button></div></div>${state.supportSubtab==='experience'?experienceView(type):`${ticketFilters()}${ticketQueue(type)}`}</div></div>`;
+  return `<div class="grid"><div class="panel"><div class="section-title compact"><div><h2>${title}</h2><p class="lead">Urgentes aparecem no topo; use os filtros para separar abertos, em atendimento e finalizados.</p></div><div class="segmented"><button class="${state.supportSubtab==='queue'?'active':''}" data-support-subtab="queue">Fila</button><button class="${state.supportSubtab==='experience'?'active':''}" data-support-subtab="experience">Experiência</button></div></div>${state.supportSubtab==='experience'?experienceView():`${ticketFilters()}${ticketQueue(type)}`}</div></div>`;
 }
 function ticketFilters(){ return `<div class="filters"><label>Status <select id="ticketFilter"><option value="all">Todos</option><option value="open">Abertos</option><option value="in_progress">Em atendimento</option><option value="closed">Finalizados</option><option value="urgent">Urgentes</option></select></label></div>`; }
 function filteredTickets(type){
@@ -290,62 +346,50 @@ function filteredTickets(type){
   else if(state.ticketFilter!=='all') rows=rows.filter(t=>t.status===state.ticketFilter);
   return rows;
 }
-function ticketQueue(type){ const rows=filteredTickets(type); if(!rows.length)return `<div class="empty">Nenhum protocolo encontrado.</div>`; return `<div class="grid">${rows.map(t=>`<article class="ticket ${t.priority==='urgent'?'urgent':''}"><div><h3>${escapeHtml(t.title)} <span class="tag dark">${t.protocol}</span> ${t.priority==='urgent'?'<span class="tag danger">Urgente</span>':''}</h3><p>${escapeHtml(t.category)} · ${ticketStatus(t.status)} · Aberto em ${fmtDateTime(t.createdAt)} · Cliente: ${escapeHtml(t.customer?.name||'—')} ${t.assignee?`· Atendimento: ${escapeHtml(t.assignee.name)} (${escapeHtml(roleBadge(t.assignee))})`:''}</p>${t.queueInfo?.message?`<small class="queue-note">${escapeHtml(t.queueInfo.message)}</small>`:''}</div><div class="mini-actions">${isStaff()&&t.status==='open'?`<button class="btn primary" data-start-ticket="${t.id}">Iniciar</button>`:''}<button class="btn" data-open-ticket="${t.id}">Abrir conversa</button>${t.status!=='closed'?`<button class="btn danger" data-close-ticket="${t.id}">Finalizar</button>`:''}</div></article>`).join('')}</div>`; }
-function experienceView(type){
-  const rows=(state.feedbacks||[]).filter(f=>f.ticket?.type===type);
+function ticketQueue(type){ const rows=filteredTickets(type); if(!rows.length)return `<div class="empty">Nenhum protocolo encontrado.</div>`; return `<div class="grid">${rows.map(t=>`<article class="ticket ${t.priority==='urgent'?'urgent':''}"><div><h3>${escapeHtml(t.title)} <span class="tag dark">${t.protocol}</span> ${t.priority==='urgent'?'<span class="tag danger">Urgente</span>':''}</h3><p>${escapeHtml(t.category)} · ${ticketStatus(t.status)} · Aberto em ${fmtDateTime(t.createdAt)} · Cliente: ${escapeHtml(t.customer?.name||'—')} ${isStaff()?`<button class="btn" data-user-detail="${t.customer?.id||''}" style="font-size:10px;padding:3px 6px">Ver perfil</button>`:''} ${t.assignee?`· Atendimento: ${escapeHtml(t.assignee.name)} (${escapeHtml(roleBadge(t.assignee))})`:''}</p>${t.queueInfo?.message?`<small class="queue-note">${escapeHtml(t.queueInfo.message)}</small>`:''}</div><div class="mini-actions">${isStaff()&&t.status==='open'?`<button class="btn primary" data-start-ticket="${t.id}">Iniciar</button>`:''}<button class="btn" data-open-ticket="${t.id}">Abrir conversa</button>${t.status!=='closed'?`<button class="btn danger" data-close-ticket="${t.id}">Finalizar</button>`:''}</div></article>`).join('')}</div>`; }
+function experienceView(){
+  const rows=(state.feedbacks||[]);
   const ranking=(state.ranking||[]).filter(r=>r.ratingCount);
-  return `<div class="grid cols-2"><div class="panel flat"><h3>Feedback dos usuários</h3>${rows.length?`<div class="table-wrap"><table><thead><tr><th>Nota</th><th>Cliente</th><th>Atendente</th><th>Comentário</th><th>Conversa</th></tr></thead><tbody>${rows.map(f=>`<tr><td>${stars(f.rating)} ${feedbackMood(f.rating)}</td><td>${escapeHtml(f.customer?.name||'—')}</td><td>${escapeHtml(f.assignee?.name||'Sem atendente')}</td><td>${escapeHtml(f.comment||'—')}</td><td><button class="btn" data-open-ticket="${f.ticketId}">Abrir</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhuma avaliação registrada ainda.</div>'}</div><div class="panel flat"><h3>Ranking de atendimento</h3>${ranking.length?`<div class="ranking">${ranking.map((r,i)=>`<div class="rank-row"><strong>${i+1}</strong>${avatar(r.user,'avatar tiny')}<span>${escapeHtml(r.user.name)}<small>${escapeHtml(roleBadge(r.user))}</small></span><b>${r.ratingAvg}</b>${stars(r.ratingAvg)}</div>`).join('')}</div>`:'<div class="empty">O ranking aparece após as primeiras avaliações.</div>'}</div></div>`;
+  return `<div class="grid cols-2"><div class="panel flat"><h3>Feedback dos usuários</h3>${rows.length?`<div class="table-wrap"><table><thead><tr><th>Nota</th><th>Cliente</th><th>Atendente</th><th>Comentário</th><th>Conversa</th></tr></thead><tbody>${rows.map(f=>`<tr><td>${stars(f.rating)}</td><td>${escapeHtml(f.customer?.name||'—')}</td><td>${escapeHtml(f.assignee?.name||'Sem atendente')}</td><td>${escapeHtml(f.comment||'—')}</td><td><button class="btn" data-open-ticket="${f.ticketId}">Abrir</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhuma avaliação registrada ainda.</div>'}</div><div class="panel flat"><h3>Ranking de atendimento</h3>${ranking.length?`<div class="ranking">${ranking.map((r,i)=>`<div class="rank-row"><strong>${i+1}</strong>${avatar(r.user,'avatar tiny')}<span>${escapeHtml(r.user.name)}<small>${escapeHtml(roleBadge(r.user))}</small></span><b>${r.ratingAvg}</b>${stars(r.ratingAvg)}</div>`).join('')}</div>`:'<div class="empty">O ranking aparece após as primeiras avaliações.</div>'}</div></div>`;
 }
 function ticketStatus(s){return ({open:'Aberto',in_progress:'Em atendimento',closed:'Finalizado'}[s]||s)}
 function messageBubble(m){
   if(m.system) return `<div class="msg system"><strong>Sistema</strong><div>${escapeHtml(m.text||'')}</div><small>${fmtDateTime(m.createdAt)}</small></div>`;
-  const sender=m.sender||{}; const team=isTeamRole(sender.role);
-  const cls=isCustomer() ? (sender.id===state.user.id?'customer me':'team') : (team?(sender.id===state.user.id?'team me':'team other-team'):'customer');
-  return `<div class="msg ${cls}"><div class="msg-head">${avatar(sender,'avatar tiny')}<strong>${escapeHtml(sender.name||'Usuário')}</strong><span class="tag dark">${escapeHtml(roleBadge(sender))}</span></div>${m.text?`<div class="msg-text">${escapeHtml(m.text)}</div>`:''}${m.attachment?`<button class="media-thumb" data-media-url="${m.attachment.url}" data-media-name="${escapeHtml(m.attachment.name||'Mídia')}" data-media-mime="${escapeHtml(m.attachment.mime||'Imagem')}"><img src="${m.attachment.url}" alt="Mídia da conversa"></button>`:''}<small>${fmtDateTime(m.createdAt)}</small></div>`;
-}
-function feedbackPrompt(t){
-  if(t.status!=='closed') return '';
-  if(!isCustomer()) return '<div class="empty compact-empty">Este protocolo foi finalizado. Ninguém pode escrever novas mensagens neste chamado.</div>';
-  if(state.ticketFeedback) return `<div class="feedback-done"><strong>Avaliação enviada</strong>${stars(state.ticketFeedback.rating)}<span>${feedbackMood(state.ticketFeedback.rating)}</span><p>${escapeHtml(state.ticketFeedback.comment||'Sem comentário.')}</p></div>`;
-  return `<form id="feedbackForm" class="feedback-form"><strong>Como foi sua experiência?</strong><div class="rating-picker">${[1,2,3,4,5].map(i=>`<label><input type="radio" name="rating" value="${i}" required><span>${'★'.repeat(i)}</span><b>${feedbackMood(i)}</b></label>`).join('')}</div><textarea name="comment" placeholder="Comentário opcional"></textarea><button class="btn primary">Enviar avaliação</button></form>`;
+  const sender=m.sender||{}; const isMe=sender.id===state.user.id;
+  return `<div class="msg ${isMe?'me':'other'}"><div class="msg-head">${avatar(sender,'avatar tiny')}<strong>${escapeHtml(sender.name||'Usuário')}</strong><span class="tag dark">${escapeHtml(roleBadge(sender))}</span></div>${m.text?`<div class="msg-text">${escapeHtml(m.text)}</div>`:''}${m.attachment?`<button class="media-thumb" data-media-url="${m.attachment.url}" data-media-name="${escapeHtml(m.attachment.name||'Mídia')}" data-media-mime="${escapeHtml(m.attachment.mime||'Imagem')}"><img src="${m.attachment.url}" alt="Mídia da conversa"></button>`:''}<small>${fmtDateTime(m.createdAt)}</small></div>`;
 }
 function ticketMetaText(t){ return `${ticketStatus(t.status)} · Aberto em ${fmtDateTime(t.createdAt)}${t.assignee?` · Atendente: ${t.assignee.name}`:''}`; }
 function ticketChatHtml(){
   const t=state.currentTicket;
   const queue=state.queueInfo?.message?`<div class="msg system queue-system"><strong>Sistema de fila</strong><div>${escapeHtml(state.queueInfo.message)}</div></div>`:'';
-  return `${queue}${(state.messages||[]).map(messageBubble).join('')}${feedbackPrompt(t)}`;
+  return `${queue}${(state.messages||[]).map(messageBubble).join('')}`;
 }
 function ticketComposeHtml(t){
   return t.status==='closed'
-    ? '<div class="empty compact-empty">Conversa encerrada. Para continuar, abra um novo protocolo.</div>'
-    : `<form id="messageForm" class="form chat-compose"><textarea id="messageText" name="text" placeholder="Escreva sua resposta"></textarea><label class="file-inline">Imagem <input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="btn primary">Enviar</button><button type="button" class="btn danger" id="closeTicketBtn">Finalizar</button></form>`;
+    ? '<div class="chat-compose"><div class="empty compact-empty">Conversa encerrada. Para continuar, abra um novo protocolo.</div></div>'
+    : `<form id="messageForm" class="chat-compose"><textarea id="messageText" name="text" placeholder="Escreva sua resposta"></textarea><label class="file-inline" title="Anexar imagem">${icon('attach')}<input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="btn primary">${icon('send')}</button><button type="button" class="btn danger" id="closeTicketBtn">Finalizar</button></form>`;
 }
-function ticketModal(){ if(!state.currentTicket) return ''; const t=state.currentTicket; return `<div class="modal-backdrop"><div class="modal wide chat-modal"><div class="modal-head chat-head"><div><h2>${escapeHtml(t.protocol)} · ${escapeHtml(t.title)}</h2><p class="lead" id="ticketModalMeta">${escapeHtml(ticketMetaText(t))}</p></div><button class="close" id="closeTicketModal">×</button></div><div class="chat" id="ticketChatBody">${ticketChatHtml()}</div><div id="ticketComposeArea">${ticketComposeHtml(t)}</div></div></div>`; }
+function ticketModal(){ if(!state.currentTicket) return ''; const t=state.currentTicket; return `<div class="modal-backdrop"><div class="modal wide chat-modal"><div class="chat-head modal-head"><div><h2>${escapeHtml(t.protocol)} · ${escapeHtml(t.title)}</h2><p class="lead" id="ticketModalMeta">${escapeHtml(ticketMetaText(t))}</p></div><button class="close" id="closeTicketModal">×</button></div><div class="chat" id="ticketChatBody">${ticketChatHtml()}</div><div id="ticketComposeArea">${ticketComposeHtml(t)}</div></div></div>`; }
 function bindTicketDynamic(){
   if($('#messageForm')) $('#messageForm').onsubmit=sendMessage;
   if($('#closeTicketBtn')) $('#closeTicketBtn').onclick=()=>closeTicket(state.currentTicket.id);
-  if($('#feedbackForm')) $('#feedbackForm').onsubmit=sendFeedback;
   $$('[data-media-url]', $('.chat-modal') || document).forEach(b=>b.onclick=()=>{state.mediaModal={url:b.dataset.mediaUrl,name:b.dataset.mediaName,mime:b.dataset.mediaMime};renderApp();});
+  $$('[data-user-detail]').forEach(b=>b.onclick=()=>openUserDetail(b.dataset.userDetail));
 }
 function syncTicketModal(draft='', updateCompose=false){
   if(!$('.chat-modal') || !state.currentTicket){ renderApp(); return; }
-  const chat=$('#ticketChatBody');
-  if(chat) chat.innerHTML=ticketChatHtml();
-  const meta=$('#ticketModalMeta');
-  if(meta) meta.textContent=ticketMetaText(state.currentTicket);
-  const compose=$('#ticketComposeArea');
-  if(compose && updateCompose) compose.innerHTML=ticketComposeHtml(state.currentTicket);
+  const chat=$('#ticketChatBody'); if(chat) chat.innerHTML=ticketChatHtml();
+  const meta=$('#ticketModalMeta'); if(meta) meta.textContent=ticketMetaText(state.currentTicket);
+  const compose=$('#ticketComposeArea'); if(compose && updateCompose) compose.innerHTML=ticketComposeHtml(state.currentTicket);
   bindTicketDynamic();
-  const input=$('#messageText');
-  if(input && draft) input.value=draft;
-  scrollChatBottom();
+  const input=$('#messageText'); if(input && draft) input.value=draft; scrollChatBottom();
 }
-function billingView(){ const s=state.subscription||{}; return `<div class="grid cols-2"><div class="panel soft"><h2>Assinatura</h2><div class="kpi-line"><span>Status</span>${statusTag(s.status||'pending_checkout')}</div><div class="kpi-line"><span>Plano</span><strong>${escapeHtml(s.planName||'Plano Pro MEI no Controle')}</strong></div><div class="kpi-line"><span>Valor</span><strong>${money(s.price||24.9)}/mês</strong></div><div class="kpi-line"><span>Fim do teste</span><strong>${s.trialEndAt?new Date(s.trialEndAt).toLocaleString('pt-BR'):'Após checkout validado'}</strong></div><div class="kpi-line"><span>Próxima cobrança</span><strong>${s.nextBillingAt?new Date(s.nextBillingAt).toLocaleString('pt-BR'):'Pendente'}</strong></div><div class="mini-actions" style="margin-top:16px"><button class="btn primary" id="startTrialBtn">${['trialing','active'].includes(s.status)?'Assinatura liberada':'Iniciar teste com checkout'}</button>${s.checkoutUrl?`<a class="btn" href="${s.checkoutUrl}" target="_blank">Abrir checkout</a>`:''}<button class="btn danger" id="cancelPlanBtn">Cancelar assinatura</button></div></div><div class="panel"><h2>Como funciona a cobrança</h2><ul class="legal-list"><li>O teste grátis começa depois da validação do método de pagamento.</li><li>A plataforma avisa durante o teste e antes das próximas cobranças.</li><li>Em produção, o cartão é informado no checkout seguro do gateway. O sistema não salva número completo do cartão.</li><li>Se houver pagamento pendente, alguns recursos podem ficar restritos até regularização.</li></ul></div></div>`; }
+function billingView(){ const s=state.subscription||{}; const pastDue=s.status==='past_due'; return `<div class="grid cols-2"><div class="panel soft"><h2>Assinatura</h2>${pastDue?`<div class="warn-banner">Seu pagamento está pendente. Regularize para continuar usando todos os recursos do sistema.</div>`:''}<div class="kpi-line"><span>Status</span>${statusTag(s.status||'pending_checkout')}</div><div class="kpi-line"><span>Plano</span><strong>${escapeHtml(s.planName||'Plano Pro MEI no Controle')}</strong></div><div class="kpi-line"><span>Valor</span><strong>${money(s.price||24.9)}/mês</strong></div><div class="kpi-line"><span>Fim do teste</span><strong>${s.trialEndAt?new Date(s.trialEndAt).toLocaleString('pt-BR'):'Após checkout validado'}</strong></div><div class="kpi-line"><span>Próxima cobrança</span><strong>${s.nextBillingAt?new Date(s.nextBillingAt).toLocaleString('pt-BR'):'Pendente'}</strong></div><div class="mini-actions" style="margin-top:14px"><button class="btn primary" id="startTrialBtn">${['trialing','active'].includes(s.status)?'Assinatura liberada':'Iniciar teste com checkout'}</button>${s.checkoutUrl?`<a class="btn" href="${s.checkoutUrl}" target="_blank">Abrir checkout</a>`:''}<button class="btn danger" id="cancelPlanBtn">Cancelar assinatura</button></div></div><div class="panel"><h2>Como funciona a cobrança</h2><ul class="legal-list"><li>O teste grátis começa depois da validação do método de pagamento.</li><li>A plataforma avisa durante o teste e antes das próximas cobranças.</li><li>Em produção, o cartão é informado no checkout seguro do gateway. O sistema não salva número completo do cartão.</li><li>Se houver pagamento pendente, alguns recursos podem ficar restritos até regularização.</li></ul></div></div>`; }
 function profileSettingsForm(){ return `<form id="profileForm" class="form"><div class="profile-large small">${avatar(state.user,'avatar big')}<div><span class="tag dark">${escapeHtml(roleBadge(state.user))}</span><div>${stars(state.user?.ratingAvg)} <strong>${state.user?.ratingAvg||'0.0'}</strong></div></div></div><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(state.user?.name||'')}"></div><div class="field"><label>Telefone</label><input name="phone" value="${escapeHtml(state.user?.phone||'')}"></div><div class="field"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><button class="btn primary block">Salvar perfil</button></form>`; }
 function accountView(){ return `<div class="grid cols-2"><div class="panel"><h2>Perfil</h2>${profileSettingsForm()}</div><div class="panel"><h2>Dados do MEI</h2><form id="companyForm" class="form"><div class="field"><label>Razão/Nome do negócio</label><input name="businessName" value="${escapeHtml(state.company?.businessName||'')}"></div><div class="field"><label>Nome fantasia</label><input name="tradeName" value="${escapeHtml(state.company?.tradeName||'')}"></div><div class="row"><div class="field"><label>CNPJ</label><input name="cnpj" value="${escapeHtml(state.company?.cnpj||'')}"></div><div class="field"><label>Atividade</label><select name="activityType">${['Serviços','Comércio','Comércio + Serviços','Caminhoneiro'].map(x=>`<option ${state.company?.activityType===x?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="row"><div class="field"><label>Limite anual</label><input name="annualLimit" type="number" step="0.01" value="${state.company?.annualLimit||81000}"></div><div class="field"><label>Valor DAS mensal</label><input name="dasValue" type="number" step="0.01" value="${state.company?.dasValue||86.05}"></div></div><button class="btn primary block">Salvar dados</button></form></div><div class="panel"><h2>Notificações</h2>${notificationsView()}</div><div class="panel"><h2>Privacidade e cookies</h2><ul class="legal-list"><li>Você pode exportar seus dados solicitando pelo suporte.</li><li>Você pode solicitar exclusão da conta, desde que não exista pagamento pendente.</li><li>Dados obrigatórios podem ser mantidos por prazo legal ou defesa de direitos.</li></ul><button class="btn" id="cookieResetBtn">Revisar cookies</button></div><div class="panel danger-zone"><h2>Zona de risco</h2><p class="lead">A exclusão desativa sua conta e inicia o processo de remoção dos dados não obrigatórios.</p><button class="btn danger" id="deleteAccountBtn">Solicitar exclusão da conta</button></div></div>`; }
 function notificationsView(){ const rows=state.notifications||[]; if(!rows.length)return '<div class="empty">Nenhuma notificação.</div>'; return `<div class="timeline">${rows.slice(0,10).map(n=>notificationItem(n,false)).join('')}</div>`; }
-function adminView(){ return `<div class="grid"><div class="grid cols-4">${stat('users','Clientes',state.metrics?.customers??'—')}${stat('card','Assinaturas',state.metrics?.activeSubscriptions??'—')}${stat('chat','Suporte aberto',state.metrics?.pendingTickets??'—')}${stat('flag','Denúncias abertas',state.metrics?.pendingReports??'—')}</div><div class="grid cols-2"><div class="panel"><h2>Criar usuário interno</h2><form id="staffForm" class="form"><div class="field"><label>Nome</label><input name="name" required></div><div class="field"><label>E-mail</label><input name="email" type="email" required></div><div class="row"><div class="field"><label>Cargo</label><select name="role"><option value="support">Suporte</option><option value="moderator">Moderação</option><option value="owner">Founder/Owner</option></select></div><div class="field"><label>Senha temporária</label><input name="password" value="Equipe@123456!"></div></div><button class="btn primary block">Criar usuário</button></form></div><div class="panel"><div class="section-title compact"><h2>Usuários</h2><p class="lead">Owner pode editar cargo, status, senha, perfil e excluir contas.</p></div>${usersTable()}</div></div></div>`; }
-function usersTable(){ if(!state.users?.length)return '<div class="empty">Carregando usuários.</div>'; return `<div class="table-wrap"><table><thead><tr><th>Perfil</th><th>E-mail</th><th>Cargo</th><th>Status</th><th>Avaliação</th><th>Ações</th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="user-line">${avatar(u,'avatar tiny')}<span>${escapeHtml(u.name)}</span></div></td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(roleBadge(u))}</td><td>${escapeHtml(u.status)}</td><td>${stars(u.ratingAvg)} ${u.ratingCount||0}</td><td><div class="mini-actions"><button class="btn" data-edit-user="${u.id}">Editar</button>${u.id!==state.user.id?`<button class="btn danger" data-delete-user="${u.id}">Excluir</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`; }
+function adminView(){ return `<div class="grid"><div class="grid cols-4">${stat('users','Clientes',state.metrics?.customers??'—')}${stat('card','Assinaturas',state.metrics?.activeSubscriptions??'—')}${stat('chat','Suporte aberto',state.metrics?.pendingTickets??'—')}${stat('flag','Denúncias abertas',state.metrics?.pendingReports??'—')}</div><div class="grid cols-2"><div class="panel"><h2>Criar usuário interno</h2><form id="staffForm" class="form"><div class="field"><label>Nome</label><input name="name" required></div><div class="field"><label>E-mail</label><input name="email" type="email" required></div><div class="row"><div class="field"><label>Cargo</label><select name="role"><option value="support">Suporte</option><option value="moderator">Moderação</option><option value="owner">Founder/Owner</option></select></div><div class="field"><label>Senha temporária</label><input name="password" value="Equipe@123456!"></div></div><button class="btn primary block">Criar usuário</button></form></div><div class="panel"><div class="section-title compact"><h2>Usuários</h2><p class="lead">Owner pode editar cargo, status, senha, perfil e excluir contas. Clique no perfil para ver detalhes.</p></div>${usersTable()}</div></div></div>`; }
+function usersTable(){ if(!state.users?.length)return '<div class="empty">Carregando usuários.</div>'; return `<div class="table-wrap"><table><thead><tr><th>Perfil</th><th>E-mail</th><th>Cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="user-line"><button class="btn" style="padding:0;background:transparent;border:0" data-user-detail="${u.id}">${avatar(u,'avatar tiny')} <span>${escapeHtml(u.name)}</span></button></div></td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(roleBadge(u))}</td><td><span class="tag ${u.status==='active'?'ok':u.status==='blocked'?'warn':'danger'}">${escapeHtml(u.status)}</span></td><td><div class="mini-actions"><button class="btn" data-edit-user="${u.id}">Editar</button>${u.id!==state.user.id?`<button class="btn danger" data-delete-user="${u.id}">Excluir</button>`:''}${isStaff()&&u.role==='customer'?`<button class="btn" data-notify-user="${u.id}">Notificar</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`; }
 function userEditModal(){ const u=state.editingUser; if(!u)return ''; return `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Editar usuário</h2><p class="lead">${escapeHtml(u.email)}</p></div><button class="close" id="closeUserEdit">×</button></div><form id="adminUserForm" class="form"><input type="hidden" name="id" value="${u.id}"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(u.name||'')}" required></div><div class="field"><label>E-mail</label><input name="email" type="email" value="${escapeHtml(u.email||'')}" required></div><div class="row"><div class="field"><label>Cargo</label><select name="role">${[['customer','Cliente'],['support','Suporte'],['moderator','Moderador'],['owner','Founder/Owner']].map(([id,label])=>`<option value="${id}" ${u.role===id?'selected':''}>${label}</option>`).join('')}</select></div><div class="field"><label>Status</label><select name="status">${['active','blocked','deleted'].map(s=>`<option value="${s}" ${u.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div><div class="row"><div class="field"><label>Telefone</label><input name="phone" value="${escapeHtml(u.phone||'')}"></div><div class="field"><label>CPF/CNPJ</label><input name="cpfCnpj" value="${escapeHtml(u.cpfCnpj||'')}"></div></div><div class="field"><label>Nova senha (opcional)</label><input name="password" type="password"></div><label class="check"><input type="checkbox" name="forcePasswordChange" ${u.forcePasswordChange?'checked':''}> Forçar troca de senha no próximo acesso</label><div class="field"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><button class="btn primary block">Salvar alterações</button></form></div></div>`; }
 function cookieBanner(){ if(localStorage.getItem('mei_cookie_ok')) return ''; return `<div class="cookie"><div><strong>Preferências de cookies</strong><p>Usamos cookies necessários para login e segurança. Você pode liberar ou recusar cookies analíticos e de marketing.</p></div><div class="mini-actions"><button class="btn" id="cookieNecessary">Somente necessários</button><button class="btn primary" id="cookieAccept">Aceitar todos</button></div></div>`; }
 function bindCookie(){ $('#cookieNecessary')?.addEventListener('click',()=>saveCookie(false,false)); $('#cookieAccept')?.addEventListener('click',()=>saveCookie(true,true)); }
@@ -364,11 +408,12 @@ function bindTab(){
   $$('[data-open-ticket]').forEach(b=>b.onclick=()=>openTicket(b.dataset.openTicket));
   $$('[data-start-ticket]').forEach(b=>b.onclick=()=>startTicket(b.dataset.startTicket));
   $$('[data-close-ticket]').forEach(b=>b.onclick=()=>closeTicket(b.dataset.closeTicket));
+  $$('[data-user-detail]').forEach(b=>b.onclick=()=>openUserDetail(b.dataset.userDetail));
+  $$('[data-notify-user]').forEach(b=>b.onclick=()=>{state.notifyUserId=b.dataset.notifyUser;state.notifyModalOpen=true;renderApp();});
   $('#closeTicketModal')?.addEventListener('click',()=>{clearTicketPolling();state.currentTicket=null;state.messages=[];state.queueInfo=null;renderApp();});
   bindTicketDynamic();
   $$('[data-media-url]').forEach(b=>b.onclick=()=>{state.mediaModal={url:b.dataset.mediaUrl,name:b.dataset.mediaName,mime:b.dataset.mediaMime};renderApp();});
   $('#closeMediaModal')?.addEventListener('click',()=>{state.mediaModal=null;renderApp();});
-  $('#closeProfileModal')?.addEventListener('click',()=>{state.profileModal=null;renderApp();});
   $('#profileForm')?.addEventListener('submit',saveProfile);
   $('#companyForm')?.addEventListener('submit',saveCompany);
   $('#deleteAccountBtn')?.addEventListener('click',deleteAccount);
@@ -402,26 +447,25 @@ async function loadTabData(force=false){
   }catch(err){toast(err.message,'error'); renderApp();}
 }
 async function startTrial(){ try{ const data=await api('/api/billing/start-trial',{method:'POST',body:'{}'}); state.subscription=data.subscription; toast(data.message||'Checkout criado.'); if(data.checkoutUrl) window.open(data.checkoutUrl,'_blank'); renderApp(); }catch(err){toast(err.message,'error')} }
-async function cancelPlan(){ if(!confirm('Cancelar assinatura? Seus dados continuarão disponíveis conforme as regras da plataforma.'))return; try{const data=await api('/api/billing/cancel',{method:'POST',body:'{}'}); state.subscription=data.subscription; toast('Assinatura cancelada.'); renderApp();}catch(err){toast(err.message,'error')} }
+async function cancelPlan(){ showConfirm('Cancelar assinatura','Cancelar assinatura? Seus dados continuarão disponíveis conforme as regras da plataforma.',async()=>{try{const data=await api('/api/billing/cancel',{method:'POST',body:'{}'}); state.subscription=data.subscription; toast('Assinatura cancelada.'); renderApp();}catch(err){toast(err.message,'error')}}) }
 async function createLaunch(e){ e.preventDefault(); const fd=new FormData(e.target); const body=Object.fromEntries(fd); body.invoiceIssued=fd.get('invoiceIssued')==='on'; try{await api('/api/launches',{method:'POST',body:JSON.stringify(body)}); toast('Lançamento salvo.'); e.target.reset(); await loadTabData();}catch(err){toast(err.message,'error')} }
-async function deleteLaunch(id){ if(!confirm('Excluir este lançamento?'))return; try{await api(`/api/launches/${id}`,{method:'DELETE'}); toast('Lançamento excluído.'); await loadTabData();}catch(err){toast(err.message,'error')} }
+async function deleteLaunch(id){ showConfirm('Excluir','Excluir este lançamento?',async()=>{try{await api(`/api/launches/${id}`,{method:'DELETE'}); toast('Lançamento excluído.'); await loadTabData();}catch(err){toast(err.message,'error')}}) }
 async function markObligationPaid(id){ try{await api(`/api/obligations/${id}`,{method:'PATCH',body:JSON.stringify({status:'paid'})}); toast('Obrigação marcada como paga.'); await loadTabData();}catch(err){toast(err.message,'error')} }
 async function generateReport(e){ e.preventDefault(); const fd=new FormData(e.target); try{const data=await api(`/api/reports/monthly?year=${fd.get('year')}&month=${fd.get('month')}`); const r=data.report; $('#reportResult').innerHTML=`<h2>${escapeHtml(r.monthName)} de ${r.year}</h2><div class="grid"><div class="kpi-line"><span>Receita</span><strong>${money(r.revenue)}</strong></div><div class="kpi-line"><span>Despesa</span><strong>${money(r.expenses)}</strong></div><div class="kpi-line"><span>Saldo</span><strong>${money(r.balance)}</strong></div></div><h3>Lançamentos</h3>${launchesTable(r.launches,true)}<button class="btn" onclick="window.print()">Imprimir / salvar PDF</button>`;}catch(err){toast(err.message,'error')} }
 async function createTicket(e){ e.preventDefault(); const fd=new FormData(e.target); const body=Object.fromEntries(fd); body.type=e.target.dataset.type; const attachment=await fileToDataUrl(e.target.attachment); if(attachment){body.attachmentDataUrl=attachment.dataUrl;body.attachmentName=attachment.name;} try{const data=await api('/api/tickets',{method:'POST',body:JSON.stringify(body)}); toast(`Protocolo ${data.ticket.protocol} aberto.`); e.target.reset(); await loadTabData();}catch(err){toast(err.message,'error')} }
 function clearTicketPolling(){ if(ticketPollTimer){clearInterval(ticketPollTimer);ticketPollTimer=null;} }
 function scrollChatBottom(){ setTimeout(()=>{ const el=$('.chat'); if(el) el.scrollTop=el.scrollHeight; },40); }
 async function openTicket(id, silent=false){ try{const data=await api(`/api/tickets/${id}/messages`); state.currentTicket=data.ticket; state.messages=data.messages; state.queueInfo=data.queueInfo; state.ticketFeedback=data.feedback; if(!silent){clearTicketPolling(); ticketPollTimer=setInterval(()=>refreshCurrentTicket(),2500);} renderApp(); scrollChatBottom();}catch(err){toast(err.message,'error')} }
-async function refreshCurrentTicket(){ if(!state.currentTicket) return; const draft=$('#messageText')?.value||''; try{const data=await api(`/api/tickets/${state.currentTicket.id}/messages`); const oldLast=state.messages?.at(-1)?.id||''; const newLast=data.messages?.at(-1)?.id||''; const oldStatus=state.currentTicket?.status; const oldFeedback=state.ticketFeedback?.id||''; const changed=(data.messages?.length!==state.messages?.length)||(oldLast!==newLast)||(data.ticket?.status!==oldStatus)||(data.ticket?.priority!==state.currentTicket?.priority)||((data.feedback?.id||'')!==oldFeedback)||(data.queueInfo?.message!==state.queueInfo?.message); if(!changed) return; state.currentTicket=data.ticket; state.messages=data.messages; state.queueInfo=data.queueInfo; state.ticketFeedback=data.feedback; if($('.chat-modal')) syncTicketModal(draft, oldStatus!==data.ticket?.status || oldFeedback!==(data.feedback?.id||'')); else renderApp();}catch{} }
+async function refreshCurrentTicket(){ if(!state.currentTicket) return; const draft=$('#messageText')?.value||''; try{const data=await api(`/api/tickets/${state.currentTicket.id}/messages`); const oldLast=state.messages?.at(-1)?.id||''; const newLast=data.messages?.at(-1)?.id||''; const oldStatus=state.currentTicket?.status; const changed=(data.messages?.length!==state.messages?.length)||(oldLast!==newLast)||(data.ticket?.status!==oldStatus)||(data.ticket?.priority!==state.currentTicket?.priority)||(data.queueInfo?.message!==state.queueInfo?.message); if(!changed) return; state.currentTicket=data.ticket; state.messages=data.messages; state.queueInfo=data.queueInfo; state.ticketFeedback=data.feedback; syncTicketModal(draft, oldStatus!==data.ticket?.status); }catch{} }
 async function startTicket(id){ try{await api(`/api/tickets/${id}/start`,{method:'POST',body:'{}'}); toast('Atendimento iniciado.'); await loadTabData();}catch(err){toast(err.message,'error')} }
-async function closeTicket(id){ if(!confirm('Finalizar esta conversa? Depois disso não será possível enviar novas mensagens neste protocolo.'))return; try{await api(`/api/tickets/${id}/close`,{method:'POST',body:'{}'}); toast('Conversa finalizada.'); if(state.currentTicket?.id===id) await refreshCurrentTicket(); else await loadTabData();}catch(err){toast(err.message,'error')} }
-async function sendMessage(e){ e.preventDefault(); const fd=new FormData(e.target); const body={text:fd.get('text')}; const attachment=await fileToDataUrl(e.target.elements.attachment); if(attachment){body.attachmentDataUrl=attachment.dataUrl;body.attachmentName=attachment.name;} try{await api(`/api/tickets/${state.currentTicket.id}/messages`,{method:'POST',body:JSON.stringify(body)}); e.target.reset(); await refreshCurrentTicket();}catch(err){toast(err.message,'error')} }
-async function sendFeedback(e){ e.preventDefault(); const fd=new FormData(e.target); try{await api(`/api/tickets/${state.currentTicket.id}/feedback`,{method:'POST',body:JSON.stringify({rating:Number(fd.get('rating')),comment:fd.get('comment')||''})}); toast('Avaliação enviada. Obrigado!'); await refreshCurrentTicket();}catch(err){toast(err.message,'error')} }
+async function closeTicket(id){ showConfirm('Finalizar conversa','Depois disso não será possível enviar novas mensagens neste protocolo.',async()=>{try{await api(`/api/tickets/${id}/close`,{method:'POST',body:'{}'}); toast('Conversa finalizada.'); if(state.currentTicket?.id===id) await refreshCurrentTicket(); else await loadTabData();}catch(err){toast(err.message,'error')}}) }
+async function sendMessage(e){ e.preventDefault(); const fd=new FormData(e.target); const body={text:fd.get('text')}; const attachment=await fileToDataUrl(e.target.attachment); if(attachment){body.attachmentDataUrl=attachment.dataUrl;body.attachmentName=attachment.name;} try{await api(`/api/tickets/${state.currentTicket.id}/messages`,{method:'POST',body:JSON.stringify(body)}); e.target.reset(); await refreshCurrentTicket();}catch(err){toast(err.message,'error')} }
 async function saveProfile(e){ e.preventDefault(); const fd=new FormData(e.target); const body={name:fd.get('name'),phone:fd.get('phone')}; const avatarFile=await fileToDataUrl(e.target.elements.avatar); if(avatarFile){body.avatarDataUrl=avatarFile.dataUrl;body.avatarName=avatarFile.name;} try{const data=await api('/api/account/profile',{method:'PUT',body:JSON.stringify(body)}); state.user=data.user; toast('Perfil atualizado.'); renderApp();}catch(err){toast(err.message,'error')} }
 async function saveCompany(e){ e.preventDefault(); const body=Object.fromEntries(new FormData(e.target)); try{const data=await api('/api/company',{method:'PUT',body:JSON.stringify(body)}); state.company=data.company; toast('Dados salvos.'); renderApp();}catch(err){toast(err.message,'error')} }
-async function deleteAccount(){ if(!confirm('Solicitar exclusão da conta? Esta ação desativa o acesso.'))return; try{await api('/api/account/delete-request',{method:'POST',body:'{}'}); toast('Solicitação registrada.'); logout(true);}catch(err){toast(err.message,'error')} }
+async function deleteAccount(){ showConfirm('Solicitar exclusão','Solicitar exclusão da conta? Esta ação desativa o acesso.',async()=>{try{await api('/api/account/delete-request',{method:'POST',body:'{}'}); toast('Solicitação registrada.'); doLogout();}catch(err){toast(err.message,'error')}}) }
 async function createStaff(e){ e.preventDefault(); const body=Object.fromEntries(new FormData(e.target)); try{const data=await api('/api/admin/users',{method:'POST',body:JSON.stringify(body)}); toast(`Usuário criado. Senha temporária: ${data.temporaryPassword}`); await loadTabData();}catch(err){toast(err.message,'error')} }
 async function saveAdminUser(e){ e.preventDefault(); const fd=new FormData(e.target); const id=fd.get('id'); const body=Object.fromEntries(fd); body.forcePasswordChange=fd.get('forcePasswordChange')==='on'; if(!body.password) delete body.password; const avatarFile=await fileToDataUrl(e.target.elements.avatar); if(avatarFile){body.avatarDataUrl=avatarFile.dataUrl;body.avatarName=avatarFile.name;} try{await api(`/api/admin/users/${id}`,{method:'PATCH',body:JSON.stringify(body)}); state.editingUser=null; toast('Usuário atualizado.'); await loadTabData(true);}catch(err){toast(err.message,'error')} }
-async function deleteAdminUser(id){ if(!confirm('Excluir esta conta? O acesso será desativado.'))return; try{await api(`/api/admin/users/${id}`,{method:'DELETE'}); toast('Conta excluída.'); await loadTabData(true);}catch(err){toast(err.message,'error')} }
+async function deleteAdminUser(id){ showConfirm('Excluir conta','Excluir esta conta? O acesso será desativado.',async()=>{try{await api(`/api/admin/users/${id}`,{method:'DELETE'}); toast('Conta excluída.'); await loadTabData(true);}catch(err){toast(err.message,'error')}}) }
 async function markNotificationsRead(){ try{await api('/api/notifications/read',{method:'POST',body:JSON.stringify({ids:[]})}); state.notifications=state.notifications.map(n=>({...n,read:true})); state.notificationOpen=false; renderApp();}catch(err){toast(err.message,'error')} }
 async function refreshNotifications(){ if(!state.token) return; try{const data=await api('/api/me'); state.user=data.user; state.company=data.company; state.subscription=data.subscription; state.notifications=data.notifications||[]; if(state.notificationOpen) renderApp(); else updateNotificationBadge(); processIncomingNotifications(state.notifications);}catch{} }
 function clearTeamPolling(){ if(teamPollTimer){clearInterval(teamPollTimer);teamPollTimer=null;} }
@@ -430,9 +474,9 @@ async function loadTeamData(silent=false){ if(!isStaff()) return; const oldCount
 async function createTeamConversation(e){ e.preventDefault(); const fd=new FormData(e.target); const memberIds=fd.getAll('memberIds'); try{const data=await api('/api/team/conversations',{method:'POST',body:JSON.stringify({title:fd.get('title'),memberIds,type:memberIds.length>1?'group':'direct'})}); state.currentTeamConversation=data.conversation; await loadTeamData(); toast('Conversa criada.');}catch(err){toast(err.message,'error')} }
 async function openTeamConversation(id){ try{const data=await api(`/api/team/conversations/${id}/messages`); state.currentTeamConversation=data.conversation; state.teamMessages=data.messages; renderApp(); scrollChatBottom();}catch(err){toast(err.message,'error')} }
 async function sendTeamMessage(e){ e.preventDefault(); const fd=new FormData(e.target); const body={text:fd.get('text')}; const attachment=await fileToDataUrl(e.target.attachment); if(attachment){body.attachmentDataUrl=attachment.dataUrl;body.attachmentName=attachment.name;} try{await api(`/api/team/conversations/${state.currentTeamConversation.id}/messages`,{method:'POST',body:JSON.stringify(body)}); e.target.reset(); await openTeamConversation(state.currentTeamConversation.id);}catch(err){toast(err.message,'error')} }
-async function deleteTeamConversation(){ if(!state.currentTeamConversation||!confirm('Excluir esta conversa da sua lista?'))return; try{await api(`/api/team/conversations/${state.currentTeamConversation.id}`,{method:'DELETE'}); state.currentTeamConversation=null; state.teamMessages=[]; await loadTeamData();}catch(err){toast(err.message,'error')} }
+async function deleteTeamConversation(){ if(!state.currentTeamConversation)return; showConfirm('Excluir conversa','Excluir esta conversa da sua lista?',async()=>{try{await api(`/api/team/conversations/${state.currentTeamConversation.id}`,{method:'DELETE'}); state.currentTeamConversation=null; state.teamMessages=[]; await loadTeamData();}catch(err){toast(err.message,'error')}}) }
 async function addTeamMember(memberId){ if(!state.currentTeamConversation)return; try{await api(`/api/team/conversations/${state.currentTeamConversation.id}/members`,{method:'POST',body:JSON.stringify({memberIds:[memberId]})}); await openTeamConversation(state.currentTeamConversation.id);}catch(err){toast(err.message,'error')} }
-async function removeTeamMember(memberId){ if(!state.currentTeamConversation||!confirm('Remover este membro do grupo?'))return; try{await api(`/api/team/conversations/${state.currentTeamConversation.id}/members/${memberId}`,{method:'DELETE'}); await openTeamConversation(state.currentTeamConversation.id);}catch(err){toast(err.message,'error')} }
+async function removeTeamMember(memberId){ if(!state.currentTeamConversation)return; showConfirm('Remover membro','Remover este membro do grupo?',async()=>{try{await api(`/api/team/conversations/${state.currentTeamConversation.id}/members/${memberId}`,{method:'DELETE'}); await openTeamConversation(state.currentTeamConversation.id);}catch(err){toast(err.message,'error')}}) }
 
 window.setTab=setTab;
 bootstrap().then(()=>{ if(state.token) loadTabData(); });
