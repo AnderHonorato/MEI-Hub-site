@@ -265,12 +265,15 @@ function dashboardData(db, userId) {
     const expenses = dinheiro(monthLaunches.filter(l => l.type === 'expense').reduce((s, l) => s + Number(l.amount || 0), 0));
     acc = dinheiro(acc + revenue);
     const percent = Math.round((acc / Number(company?.annualLimit || 81000)) * 100);
-    return { month, name, revenue, expenses, accumulated: acc, percent, status: percent > 100 ? 'limit_exceeded' : percent > 80 ? 'warning' : 'ok' };
+    return { month, nome: name, receita: revenue, despesas: expenses, acumulado: acc, percentual: percent, name, revenue, expenses, accumulated: acc, percent, status: percent > 100 ? 'limit_exceeded' : percent > 80 ? 'warning' : 'ok' };
   });
   const current = months[new Date().getMonth()];
   const obligations = db.obligations.filter(o => o.userId === userId).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   const pendingObligations = obligations.filter(o => o.status !== 'paid').slice(0, 8);
-  return { company, year, months, current, launches: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12), obligations: pendingObligations };
+  return {
+    empresa: company, ano: year, meses: months, atual: current, obrigacoes: pendingObligations, lancamentos: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12),
+    company, year, months, current, launches: launches.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12), obligations: pendingObligations
+  };
 }
 
 function canAccessTicket(user, ticket) {
@@ -460,7 +463,7 @@ async function handleApi(req, res, url) {
     if (method === 'GET' && pathname === '/api/launches') {
       if (!requireActivePlan(user, db, res)) return;
       const launches = db.launches.filter(l => l.userId === user.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-      return ok(res, { launches });
+      return ok(res, { launches: launches.map(l => ({ ...l, data: l.date, titulo: l.title, tipo: l.type, categoria: l.category, valor: l.amount })), launches });
     }
 
     if (method === 'POST' && pathname === '/api/launches') {
@@ -483,7 +486,7 @@ async function handleApi(req, res, url) {
 
     if (method === 'GET' && pathname === '/api/obligations') {
       if (!requireActivePlan(user, db, res)) return;
-      return ok(res, { obligations: db.obligations.filter(o => o.userId === user.id).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)) });
+      return ok(res, { obligations: db.obligations.filter(o => o.userId === user.id).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).map(o => ({ ...o, titulo: o.title, dataVencimento: o.dueDate, valor: o.amount, urlComprovante: o.receiptUrl, tipo: o.type })) });
     }
 
     const obligationPatch = pathname.match(/^\/api\/obligations\/([^/]+)$/);
