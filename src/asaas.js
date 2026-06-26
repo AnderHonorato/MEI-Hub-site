@@ -1,17 +1,17 @@
-const config = require('./config');
-const { addDays, yyyyMmDd } = require('./utils');
+const cfg = require('./configuracao');
+const { adicionarDias, anoMesDia } = require('./utilidades');
 
 async function asaasFetch(path, options = {}) {
-  if (!config.asaasApiKey) {
+  if (!cfg.asaasApiKey) {
     const err = new Error('ASAAS_API_KEY não configurada. Defina no .env ou use PAYMENT_MOCK=true para testar local.');
     err.status = 503;
     throw err;
   }
-  const res = await fetch(`${config.asaasBaseUrl}${path}`, {
+  const res = await fetch(`${cfg.asaasBaseUrl}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'access_token': config.asaasApiKey,
+      'access_token': cfg.asaasApiKey,
       ...(options.headers || {})
     }
   });
@@ -28,7 +28,7 @@ async function asaasFetch(path, options = {}) {
 }
 
 async function createCheckout({ user, company, subscriptionId }) {
-  const trialDueDate = yyyyMmDd(addDays(new Date(), config.trialDays));
+  const trialDueDate = anoMesDia(adicionarDias(new Date(), cfg.trialDays));
   const payload = {
     externalReference: subscriptionId,
     billingTypes: ['CREDIT_CARD'],
@@ -41,9 +41,9 @@ async function createCheckout({ user, company, subscriptionId }) {
       phone: user.phone || undefined
     },
     items: [{
-      name: config.planName,
-      description: `Assinatura mensal do ${config.planName} com ${config.trialDays} dias de teste antes da primeira cobrança.`,
-      value: config.planPrice,
+      name: cfg.planName,
+      description: `Assinatura mensal do ${cfg.planName} com ${cfg.trialDays} dias de teste antes da primeira cobrança.`,
+      value: cfg.planPrice,
       quantity: 1
     }],
     subscription: {
@@ -51,9 +51,9 @@ async function createCheckout({ user, company, subscriptionId }) {
       nextDueDate: `${trialDueDate}T03:00:00+0000`
     },
     callback: {
-      successUrl: `${config.appUrl}/?checkout=success`,
-      cancelUrl: `${config.appUrl}/?checkout=cancel`,
-      expiredUrl: `${config.appUrl}/?checkout=expired`
+      successUrl: `${cfg.appUrl}/?checkout=success`,
+      cancelUrl: `${cfg.appUrl}/?checkout=cancel`,
+      expiredUrl: `${cfg.appUrl}/?checkout=expired`
     }
   };
   const data = await asaasFetch('/v3/checkouts', { method: 'POST', body: JSON.stringify(payload) });
@@ -69,9 +69,9 @@ async function createPaymentLink({ user, company, subscriptionId }) {
   const payload = {
     billingType: 'CREDIT_CARD',
     chargeType: 'RECURRENT',
-    name: config.planName,
-    description: `Assinatura mensal do ${config.planName}. Cliente: ${user.email}.`,
-    value: config.planPrice,
+    name: cfg.planName,
+    description: `Assinatura mensal do ${cfg.planName}. Cliente: ${user.email}.`,
+    value: cfg.planPrice,
     subscriptionCycle: 'MONTHLY',
     externalReference: subscriptionId,
     notificationEnabled: true

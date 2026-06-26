@@ -12,7 +12,7 @@ process.env.PAYMENT_MOCK = 'true';
 process.env.PORT = '0';
 process.env.APP_URL = 'http://localhost:0';
 
-const { server } = require('../src/server');
+const { server } = require('../src/servidor');
 
 function listen() {
   return new Promise(resolve => server.listen(0, () => resolve(server.address().port)));

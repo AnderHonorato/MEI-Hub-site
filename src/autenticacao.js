@@ -1,8 +1,8 @@
 const crypto = require('crypto');
-const config = require('./config');
-const { jsonBase64url, timingSafeEqual } = require('./utils');
+const cfg = require('./configuracao');
+const { jsonBase64url, comparacaoTempoSeguro } = require('./utilidades');
 
-const ROLES = {
+const CARGOS = {
   OWNER: 'owner',
   SUPPORT: 'support',
   MODERATOR: 'moderator',
@@ -23,34 +23,34 @@ const PERMISSIONS = {
   customer: ['customer:self', 'customer:tickets:write', 'customer:mei:write'],
 };
 
-function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+function gerarHashSenha(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.pbkdf2Sync(String(password), salt, 120000, 32, 'sha256').toString('hex');
   return `${salt}:${hash}`;
 }
 
-function verifyPassword(password, passwordHash) {
+function verificarSenha(password, passwordHash) {
   if (!passwordHash || !passwordHash.includes(':')) return false;
   const [salt, hash] = passwordHash.split(':');
-  const candidate = hashPassword(password, salt).split(':')[1];
-  return timingSafeEqual(hash, candidate);
+  const candidate = gerarHashSenha(password, salt).split(':')[1];
+  return comparacaoTempoSeguro(hash, candidate);
 }
 
-function signToken(payload, expiresSeconds = 60 * 60 * 12) {
+function assinarToken(payload, expiresSeconds = 60 * 60 * 12) {
   const header = { alg: 'HS256', typ: 'JWT' };
   const exp = Math.floor(Date.now() / 1000) + expiresSeconds;
   const body = { ...payload, exp };
   const unsigned = `${jsonBase64url(header)}.${jsonBase64url(body)}`;
-  const sig = crypto.createHmac('sha256', config.jwtSecret).update(unsigned).digest('base64url');
+  const sig = crypto.createHmac('sha256', cfg.jwtSecret).update(unsigned).digest('base64url');
   return `${unsigned}.${sig}`;
 }
 
-function verifyToken(token) {
+function verificarToken(token) {
   try {
     const [h, p, s] = String(token || '').split('.');
     if (!h || !p || !s) return null;
     const unsigned = `${h}.${p}`;
-    const expected = crypto.createHmac('sha256', config.jwtSecret).update(unsigned).digest('base64url');
-    if (!timingSafeEqual(s, expected)) return null;
+    const expected = crypto.createHmac('sha256', cfg.jwtSecret).update(unsigned).digest('base64url');
+    if (!comparacaoTempoSeguro(s, expected)) return null;
     const payload = JSON.parse(Buffer.from(p, 'base64url').toString('utf8'));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
@@ -59,15 +59,15 @@ function verifyToken(token) {
   }
 }
 
-function hasPermission(user, permission) {
+function temPermissao(user, permission) {
   const perms = PERMISSIONS[user?.role] || [];
   return perms.includes('*') || perms.includes(permission);
 }
 
-function publicUser(user) {
+function usuarioPublico(user) {
   if (!user) return null;
   const { passwordHash, ...safe } = user;
   return { ...safe, roleLabel: ROLE_LABELS[user.role] || user.role };
 }
 
-module.exports = { ROLES, ROLE_LABELS, PERMISSIONS, hashPassword, verifyPassword, signToken, verifyToken, hasPermission, publicUser };
+module.exports = { CARGOS, ROLE_LABELS, PERMISSIONS, gerarHashSenha, verificarSenha, assinarToken, verificarToken, temPermissao, usuarioPublico };
