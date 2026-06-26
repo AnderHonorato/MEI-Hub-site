@@ -91,3 +91,5 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:inherit}
   .painel{padding:14px;border-radius:18px}.cookie{grid-template-columns:1fr}
   .msg{max-width:90%}.chamado{grid-template-columns:1fr}.modal{padding:16px;border-radius:20px}
 }
+
+@media print{.barra-lateral,.principal-topo,.flutuante-chat,.flutuante-modal,.cookie,.chat-compor,#toast{display:none!important}.concha{display:block!important}.principal{width:100%!important}.conteudo{padding:0!important;max-width:100%!important}.painel{box-shadow:none!important;border:1px solid #ccc!important;page-break-inside:avoid}.btn,.marcador{display:none!important}.envoltorio-tabela{border:1px solid #000!important}th,td{border-bottom:1px solid #000!important;padding:6px!important;font-size:10px!important}}
