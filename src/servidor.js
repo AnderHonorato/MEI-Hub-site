@@ -514,6 +514,7 @@ async function handleApi(req, res, url) {
       company.annualLimit = Number(body.annualLimit || company.annualLimit || 81000);
       company.dasValue = Number(body.dasValue || company.dasValue || 86.05);
       company.updatedAt = agoraISO();
+      db.obligations.filter(o => o.userId === user.id && o.type === 'DAS Mensal' && o.status === 'pending').forEach(o => { o.amount = Number(body.dasValue || company.dasValue); o.updatedAt = agoraISO(); });
       auditar(db, user.id, 'company.update', { companyId: company.id }); escreverBanco(db); return ok(res, { company });
     }
 
@@ -570,7 +571,7 @@ async function handleApi(req, res, url) {
       if (ticket.status === 'closed') return ok(res, { ticket: exposeTicket(db, ticket) });
       ticket.status = 'closed'; ticket.closedAt = agoraISO(); ticket.closedBy = user.id; ticket.updatedAt = agoraISO();
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: user.id, text: 'Conversa finalizada. Para continuar, abra um novo protocolo.', attachment: null, system: true, createdAt: agoraISO() });
-      if (ticket.customerId && ticket.customerId !== user.id) adicionarNotificacao(db, ticket.customerId, 'ticket', `Protocolo ${ticket.protocolo} finalizado`, 'Avalie sua experiência no atendimento.', `ticket-close-${ticket.id}`, ticketTarget(ticket));
+      if (ticket.customerId && ticket.customerId !== user.id) adicionarNotificacao(db, ticket.customerId, 'ticket', `Protocolo ${ticket.protocol} finalizado`, 'Avalie sua experiência no atendimento.', `ticket-close-${ticket.id}`, ticketTarget(ticket));
       auditar(db, user.id, 'ticket.close', { ticketId: ticket.id }); escreverBanco(db); return ok(res, { ticket: exposeTicket(db, ticket) });
     }
 
@@ -595,8 +596,8 @@ async function handleApi(req, res, url) {
       ticket.updatedAt = agoraISO();
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: user.id, text: `Atendimento transferido para ${novoAtendente.nome}. Aguarde...`, attachment: null, system: true, createdAt: agoraISO() });
       db.messages.push({ id: uid('msg'), ticketId: ticket.id, senderId: novoAtendente.id, text: `${novoAtendente.nome} assumiu este atendimento.`, attachment: null, system: true, createdAt: agoraISO() });
-      adicionarNotificacao(db, novoAtendente.id, 'ticket', `Atendimento transferido: ${ticket.protocolo}`, `${antigoAtendenteNome} transferiu o protocolo ${ticket.protocolo} para você.`, `transfer-${ticket.id}-${novoAtendente.id}`, ticketTarget(ticket));
-      if (ticket.customerId) adicionarNotificacao(db, ticket.customerId, 'ticket', `Atendimento atualizado em ${ticket.protocolo}`, `${novoAtendente.nome} assumiu seu atendimento.`, `transfer-customer-${ticket.id}`, ticketTarget(ticket));
+      adicionarNotificacao(db, novoAtendente.id, 'ticket', `Atendimento transferido: ${ticket.protocol}`, `${antigoAtendenteNome} transferiu o protocolo ${ticket.protocol} para você.`, `transfer-${ticket.id}-${novoAtendente.id}`, ticketTarget(ticket));
+      if (ticket.customerId) adicionarNotificacao(db, ticket.customerId, 'ticket', `Atendimento atualizado em ${ticket.protocol}`, `${novoAtendente.nome} assumiu seu atendimento.`, `transfer-customer-${ticket.id}`, ticketTarget(ticket));
       auditar(db, user.id, 'ticket.transfer', { ticketId: ticket.id, fromUserId: user.id, toUserId: novoAtendente.id });
       escreverBanco(db);
       return ok(res, { ticket: exposeTicket(db, ticket) });
